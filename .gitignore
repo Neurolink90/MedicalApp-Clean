@@ -1,0 +1,23 @@
+# Flutter/Dart
+.dart_tool/
+build/
+ios/
+android/
+macos/
+linux/
+windows/
+web/
+*.apk
+*.aab
+
+# IDE
+.idea/
+.vscode/
+
+# Large binaries
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.zip

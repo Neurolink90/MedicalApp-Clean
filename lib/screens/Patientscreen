@@ -1,0 +1,23 @@
+import 'add_patient_screen.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+floatingActionButton: FloatingActionButton(
+  onPressed: () async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddPatientScreen()),
+    );
+    if (result == true) loadPatients(); // refresh list
+  },
+  child: const Icon(Icons.add),
+),
+trailing: Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    IconButton(icon: Icon(Icons.picture_as_pdf), onPressed: () async {
+      final file = await PdfService.generatePatientPdf(p);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("PDF saved: ${file.path}")));
+    }),
+    PopupMenuButton(...existing edit/delete...)
+  ],
+),
