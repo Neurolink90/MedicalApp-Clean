@@ -1,5 +1,5 @@
 name: medical_app
-description: A cross-platform medical records app.
+description: A cross-platform medical records app for secure patient management, analysis, and reminders.
 
 publish_to: 'none'
 
@@ -7,12 +7,13 @@ version: 1.0.0+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
+  flutter: ">=3.24.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  cupertino_icons: ^1.0.2
-  http: ^1.1.0
+  cupertino_icons: ^1.0.8
+  http: ^1.2.1
   table_calendar: ^3.1.2
   flutter_local_notifications: ^17.2.2
   intl: ^0.19.0
@@ -20,9 +21,9 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
+  flutter_lints: ^3.0.6
 
 flutter:
-  uses-material-design: true  # ← This fixes icon errors
+  uses-material-design: true  # Fixes icon/tree-shaking errors
   assets:
     - assets/
