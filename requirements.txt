@@ -1,4 +1,11 @@
-gunicorn
+# Core web framework
 Flask==3.1.2
+
+# CORS support for frontend requests (GitHub Pages)
 flask-cors==6.0.1
+
+# Encryption library
 cryptography==46.0.3
+
+# Production WSGI server (recommended for Render)
+gunicorn==23.0.0
