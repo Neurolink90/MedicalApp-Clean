@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'screens/medical_records_screen.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+
+// Ensure this path matches exactly where your file is located
+import 'medical_records_screen.dart'; 
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,10 +19,10 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscureText = true;
 
-  // ← THIS IS YOUR REAL LIVE BACKEND (once Render is fixed)
+  // Targeting your Render backend for production
   final String backendUrl = kIsWeb
-      ? "https://medicalapp-clean.onrender.com/login"   // ← LIVE WORLDWIDE
-      : "http://10.0.2.2:5000/login";                    // ← Android emulator / local debug
+      ? "https://medicalapp-clean.onrender.com/login"   // Live production URL
+      : "http://10.0.2.2:5000/login";                    // Local debug for Android emulator
 
   Future<void> _login() async {
     final email = _emailController.text.trim();
@@ -38,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Uri.parse(backendUrl),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"email": email, "password": password}),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30)); // Increased timeout for Render "cold starts"
 
       if (!mounted) return;
 
@@ -46,11 +48,17 @@ class _LoginScreenState extends State<LoginScreen> {
         final data = jsonDecode(response.body);
         if (data["success"] == true) {
           _showSnackBar("Welcome back, Doctor!", Colors.green);
+          
+          // Small delay so user sees the success message
           await Future.delayed(const Duration(milliseconds: 800));
+          
           if (mounted) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => const MedicalRecordsScreen()),
+              MaterialPageRoute(
+                // Corrected: MedicalRecordsScreen is not a const because it contains non-const lists
+                builder: (_) => const MedicalRecordsScreen(), 
+              ),
             );
           }
         } else {
@@ -60,7 +68,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _showSnackBar("Server error: ${response.statusCode}", Colors.red);
       }
     } catch (e) {
-      _showSnackBar("No internet or server unreachable", Colors.red);
+      // Free-tier Render instances take ~30s to "wake up" on first load
+      _showSnackBar("Connection failed. Backend may be waking up—please try again.", Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -68,7 +77,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color, duration: const Duration(seconds: 3)),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: color,
+        duration: const Duration(seconds: 4),
+      ),
     );
   }
 
@@ -83,7 +96,6 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo
                 Icon(Icons.local_hospital_rounded, size: 100, color: Colors.blue[700]),
                 const SizedBox(height: 24),
                 Text(
@@ -92,10 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text("Secure Patient Management System", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-
                 const SizedBox(height: 60),
-
-                // Email Field
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -108,8 +117,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-
-                // Password Field
                 TextField(
                   controller: _passwordController,
                   obscureText: _obscureText,
@@ -126,8 +133,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 40),
-
-                // Login Button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
@@ -147,7 +152,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         : const Text("LOGIN", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                 ),
-
                 const SizedBox(height: 24),
                 Text(
                   "Demo: john@example.com / securepassword",
