@@ -52,6 +52,40 @@ def handle_exception(e):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
+    # Add these imports to your existing backend.py
+from medical_code_library import MedicalDataLibrary, Patient, MedicalRecord
+import os
+
+# Initialize your library
+library = MedicalDataLibrary()
+
+# Mock data initialization (In a real app, this would be a database)
+def init_mock_data():
+    john = Patient(name="John Doe", dob="1980-01-01", ssn="123-45-6789", 
+                   address="123 Main St", email="john@example.com", phone="555-1234")
+    # Adding a sample record
+    record = MedicalRecord(date="2025-11-28", provider="Dr. Smith", 
+                           specialty="Cardiology", content="Follow-up on Metformin dosage.")
+    john.add_medical_record(record)
+    library.add_patient(john)
+
+init_mock_data()
+
+@app.route('/appointments', methods=['GET'])
+def get_appointments():
+    # In a real app, you'd verify the user's session/token first
+    # For now, we return mock events formatted for your Flutter calendar
+    events = {
+        "2025-11-28T00:00:00Z": [
+            {'title': 'Dr. Smith – Cardiology', 'time': '10:30 AM', 'type': 'appointment'},
+            {'title': 'Metformin 500mg', 'time': '8:00 AM', 'type': 'medication'},
+        ],
+        "2025-11-30T00:00:00Z": [
+            {'title': 'Blood Work – LabCorp', 'time': '9:00 AM', 'type': 'appointment'},
+        ],
+    }
+    return jsonify(events)
+
 
 
 
