@@ -85,6 +85,19 @@ def get_appointments():
         ],
     }
     return jsonify(events)
+    
+@app.route('/patients', methods=['GET'])
+def get_patients():
+    # Retrieve all patients from your MedicalDataLibrary
+    patient_list = []
+    for ssn, patient in library.patients.items():
+        patient_list.append({
+            "name": patient.name,
+            "dob": patient.dob.strftime('%Y-%m-%d'),
+            "mrn": f"MRN-{ssn[-4:]}", # Using last 4 of SSN as MRN
+            "status": "Stable"
+        })
+    return jsonify(patient_list)
 
 
 
