@@ -8,17 +8,27 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 
-# --- Encryption Key Setup (Store Securely) ---
-encryption_key = Fernet.generate_key()  # Store securely
-cipher = Fernet(encryption_key)
+# --- Encryption Key Setup (REPLACED FOR CONSISTENCY) ---
+# This looks for the permanent mL-N5N... key you saved in your Render settings.
+env_key = os.environ.get('FERNET_KEY')
 
-# --- SMTP Configuration (For Sending Emails with Attachments) ---
-SMTP_SERVER = 'localhost'  # Local SMTP server for debugging
-SMTP_PORT = 1025           # Mock SMTP server port
+if env_key:
+    # Use the stable key from Render environment
+    cipher = Fernet(env_key.encode())
+else:
+    # Fallback for local testing if no environment variable is found
+    # In production (Render), it will use your permanent key.
+    fallback_key = b'mL-N5Npl_dijvORR5c4im7nWs5HydjW_qXCbVFKFGKk='
+    cipher = Fernet(fallback_key)
+    print("WARNING: Using fallback key for local environment.")
+
+# --- SMTP Configuration ---
+SMTP_SERVER = 'localhost'
+SMTP_PORT = 1025
 EMAIL_USER = 'test@example.com'
-EMAIL_PASS = 'password'    # Mock password, not actually used
+EMAIL_PASS = 'password'
 
-# --- MedicalRecord Class with Encryption ---
+# --- MedicalRecord Class ---
 class MedicalRecord:
     def __init__(self, date: str, provider: str, specialty: str, content: str):
         self.date = datetime.strptime(date, '%Y-%m-%d')
@@ -29,14 +39,14 @@ class MedicalRecord:
     def get_decrypted_content(self):
         return cipher.decrypt(self.content).decode()
 
-# --- MedicalImage Class (Handles Image Files) ---
+# --- MedicalImage Class ---
 class MedicalImage:
     def __init__(self, date: str, image_type: str, file_path: str):
         self.date = datetime.strptime(date, '%Y-%m-%d')
         self.image_type = image_type
-        self.file_path = file_path  # File path for the image
+        self.file_path = file_path
 
-# --- Patient Class with Encryption for Sensitive Data ---
+# --- Patient Class ---
 class Patient:
     def __init__(self, name: str, dob: str, ssn: str, address: str, email: str, phone: str):
         self.name = name
@@ -66,11 +76,11 @@ class MedicalDataLibrary:
         self.patients: Dict[str, Patient] = {}
 
     def add_patient(self, patient: Patient):
+        # Index by decrypted SSN for easy retrieval
         self.patients[patient.get_decrypted_ssn()] = patient
 
     def get_patient_by_ssn(self, ssn: str) -> Optional[Patient]:
-        encrypted_ssn = cipher.encrypt(ssn.encode())
-        return self.patients.get(cipher.decrypt(encrypted_ssn).decode(), None)
+        return self.patients.get(ssn)
 
     def send_email_with_attachment(self, to_email: str, subject: str, body: str, file_path: str):
         """Send an email with an attachment."""
@@ -81,7 +91,6 @@ class MedicalDataLibrary:
             msg['Subject'] = subject
             msg.attach(MIMEText(body, 'plain'))
 
-            # Check if the file exists before attaching
             if not os.path.exists(file_path):
                 print(f"Attachment file not found: {file_path}")
                 return
@@ -93,43 +102,12 @@ class MedicalDataLibrary:
                 part.add_header('Content-Disposition', f"attachment; filename= {os.path.basename(file_path)}")
                 msg.attach(part)
 
-            # Attempt to connect to the SMTP server
             server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
             text = msg.as_string()
             server.sendmail(EMAIL_USER, to_email, text)
             server.quit()
-            print(f"Email sent to {to_email} with attachment {file_path}")
-        except ConnectionRefusedError:
-            print("Failed to connect to the SMTP server. Is the server running?")
         except Exception as e:
             print(f"Failed to send email: {e}")
 
     def receive_file_via_sftp(self, remote_path: str, local_path: str):
-        """Mocked function to simulate receiving a file securely via SFTP."""
-        print(f"Mocked SFTP transfer: Simulated file received from {remote_path} to {local_path}")
-
-# --- Example Usage ---
-library = MedicalDataLibrary()
-
-# Add a new patient
-patient = Patient(name="John Doe", dob="1980-01-01", ssn="123-45-6789", address="123 Main St", email="john@example.com", phone="555-1234")
-library.add_patient(patient)
-
-# Add medical records and images
-record1 = MedicalRecord(date="2023-01-01", provider="Dr. Smith", specialty="Cardiology", content="Cardiology report content")
-image1 = MedicalImage(date="2023-01-05", image_type="CT", file_path="C:\\Users\\Zach\\Documents\\ct1.png")  # Update path to actual file
-
-patient.add_medical_record(record1)
-patient.add_medical_image(image1)
-
-# Send a medical report as an email attachment using the mock SMTP server
-library.send_email_with_attachment(
-    to_email=patient.get_decrypted_email(),
-    subject="Your Medical Report",
-    body="Please find attached your medical report.",
-    file_path="C:\\Users\\Zach\\Documents\\ct1.png"  # Update path to actual file
-)
-
-# Mocked receive a file from an SFTP server
-library.receive_file_via_sftp(remote_path='/remote/path/medical_report.pdf', local_path='C:\\Users\\Zach\\Documents\\medical_report.pdf')
-
+        print(f"Mocked SFTP transfer from {remote_path} to {local_path}")
