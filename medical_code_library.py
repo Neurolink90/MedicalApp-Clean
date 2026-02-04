@@ -132,3 +132,4 @@ library.send_email_with_attachment(
 
 # Mocked receive a file from an SFTP server
 library.receive_file_via_sftp(remote_path='/remote/path/medical_report.pdf', local_path='C:\\Users\\Zach\\Documents\\medical_report.pdf')
+
