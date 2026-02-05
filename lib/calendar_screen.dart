@@ -102,4 +102,48 @@ class _CalendarScreenState extends State<CalendarScreen> {
   }
 
   // ... keep your existing _buildEventList and _showEventDetails methods here
-}
+Widget _buildEventList() {
+    final events = _selectedDay == null ? [] : _getEventsForDay(_selectedDay!);
+    
+    if (events.isEmpty) {
+      return const Center(child: Text("No appointments or medications scheduled."));
+    }
+
+    return ListView.builder(
+      itemCount: events.length,
+      itemBuilder: (context, index) {
+        final event = events[index];
+        final isMed = event['type'] == 'medication';
+
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: ListTile(
+            leading: Icon(
+              isMed ? Icons.medication_liquid : Icons.local_hospital,
+              color: isMed ? Colors.green : Colors.blue,
+            ),
+            title: Text(event['title'] ?? ""),
+            subtitle: Text("Scheduled for ${event['time']}"),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _showEventDetails(event),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEventDetails(Map<String, String> event) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(event['title']!, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 10),
+            Text("Type: ${event['type']}"),
+            Text("Time: ${event['time']}"),
+            const SizedBox(height: 20),
+     
