@@ -101,12 +101,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  // ... keep your existing _buildEventList and _showEventDetails methods here
-Widget _buildEventList() {
+  // FIXED: These methods are now properly inside the class
+  Widget _buildEventList() {
     final events = _selectedDay == null ? [] : _getEventsForDay(_selectedDay!);
     
     if (events.isEmpty) {
-      return const Center(child: Text("No appointments or medications scheduled."));
+      return const Center(child: Text("No appointments scheduled."));
     }
 
     return ListView.builder(
@@ -146,4 +146,13 @@ Widget _buildEventList() {
             Text("Type: ${event['type']}"),
             Text("Time: ${event['time']}"),
             const SizedBox(height: 20),
-     
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Close"),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+} // This final brace closes the class.
