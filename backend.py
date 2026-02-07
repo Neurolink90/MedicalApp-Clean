@@ -42,6 +42,24 @@ init_mock_data()
 
 # --- ROUTES ---
 
+@app.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    data = request.get_json()
+    email = data.get('email')
+    
+    # Use your library to find the patient by email (simulated)
+    if email == "john@example.com":
+        # In a real app, you'd generate a real PDF. Here we mock the call.
+        library.send_email_with_attachment(
+            to_email=email,
+            subject="Password Reset Request",
+            body="Attached are your instructions to reset your MediRecords Pro password.",
+            file_path="reset_instructions.pdf" # Mock path
+        )
+        return jsonify(success=True, message="Reset instructions sent to your email.")
+    
+    return jsonify(success=False, message="Email not found."), 404
+    
 @app.route("/")
 def health_check():
     return jsonify({
@@ -93,3 +111,4 @@ def get_appointments():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
