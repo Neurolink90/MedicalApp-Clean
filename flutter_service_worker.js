@@ -3,12 +3,13 @@ const MANIFEST = 'flutter-app-manifest';
 const TEMP = 'flutter-temp-cache';
 const CACHE_NAME = 'flutter-app-cache';
 
-const RESOURCES = {"assets/AssetManifest.bin": "0b0a3415aad49b6e9bf965ff578614f9",
-"assets/AssetManifest.bin.json": "a1fee2517bf598633e2f67fcf3e26c94",
-"assets/AssetManifest.json": "99914b932bd37a50b983c5e7c90ae93b",
-"assets/FontManifest.json": "7b2a36307916a9721811788013e65289",
+const RESOURCES = {"assets/AssetManifest.bin": "693635b5258fe5f1cda720cf224f158c",
+"assets/AssetManifest.bin.json": "69a99f98c8b1fb8111c5fb961769fcd8",
+"assets/AssetManifest.json": "2efbb41d7877d10aac9d091f58ccd7b9",
+"assets/FontManifest.json": "dc3d03800ccca4601324923c0b1d6d57",
 "assets/fonts/MaterialIcons-Regular.otf": "a9ab7d4f868645dea01a2a957af1e314",
-"assets/NOTICES": "500564a939f4a86fa6eb7d894d8877ac",
+"assets/NOTICES": "9d3417279bd1b71a5016390b372fedb7",
+"assets/packages/cupertino_icons/assets/CupertinoIcons.ttf": "33b7d9392238c04c131b6ce224e13711",
 "assets/shaders/ink_sparkle.frag": "ecc85a2e95f5e9f53123dcaf8cb9b6ce",
 "calendar_screen.dart": "82ed529de5375c86236df784c4a0781e",
 "canvaskit/canvaskit.js": "140ccb7d34d0a55065fbd422b843add6",
@@ -25,7 +26,7 @@ const RESOURCES = {"assets/AssetManifest.bin": "0b0a3415aad49b6e9bf965ff578614f9
 "canvaskit/skwasm_heavy.wasm": "8034ad26ba2485dab2fd49bdd786837b",
 "favicon.png": "5dcef449791fa27946b3d35ad8803796",
 "flutter.js": "888483df48293866f9f41d3d9274a779",
-"flutter_bootstrap.js": "45277cf99d55ac791b66d639bad64b1b",
+"flutter_bootstrap.js": "7ca26ee7d3edadf1ccd546e7e35e795b",
 "icons/Icon-192.png": "ac9a721a12bbc803b44f645561ecb1e1",
 "icons/Icon-512.png": "96e752610906ba2a93c65f8abe1645f1",
 "icons/Icon-maskable-192.png": "c457ef57daa1d16f64b27b786ec2ea3c",
@@ -34,7 +35,7 @@ const RESOURCES = {"assets/AssetManifest.bin": "0b0a3415aad49b6e9bf965ff578614f9
 "/": "f20e89c163666089c6505fe6eec92df5",
 "login_screen.dart": "05ba7775fc96b812ec84622e8fb58634",
 "main.dart": "66cd89f4c4a8266e3b7fa46e8c1659e7",
-"main.dart.js": "6ca4626feee942fa2d6770ae9f6826a3",
+"main.dart.js": "b86d3b7de9119a9eeb9192cde841f751",
 "manifest.json": "a5a8e013c8acaf803dd244f5347e4c2d",
 "medical_records_screen.dart": "b14ac5cc764bd3efba5855c8c9d2153d",
 "version.json": "0f2f7ae284c12f3d54cff766b06c7c06"};
