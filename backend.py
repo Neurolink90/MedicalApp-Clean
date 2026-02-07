@@ -60,6 +60,37 @@ def forgot_password():
     
     return jsonify(success=False, message="Email not found."), 404
     
+@app.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    """
+    Simulates a password reset request.
+    It verifies the email, triggers the encryption library, 
+    and mocks sending an email with an attachment.
+    """
+    data = request.get_json()
+    email = data.get('email')
+
+    if not email:
+        return jsonify(success=False, message="Email is required"), 400
+
+    # In a real app, you would query your database for this user.
+    # For the demo, we use the John Doe email from your library.
+    if email == "john@example.com":
+        try:
+            # Using your library logic to simulate sending the reset file
+            library.send_email_with_attachment(
+                to_email=email,
+                subject="MediRecords Pro - Password Reset",
+                body="Hello, please find the instructions for your password reset attached.",
+                file_path="reset_instructions.pdf" # Mock filename
+            )
+            return jsonify(success=True, message="Reset instructions sent to your email.")
+        except Exception as e:
+            app.logger.error(f"Error in forgot_password: {e}")
+            return jsonify(success=False, message="Failed to process request"), 500
+
+    return jsonify(success=False, message="Email address not found"), 404
+    
 @app.route("/")
 def health_check():
     return jsonify({
@@ -111,4 +142,5 @@ def get_appointments():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
 
