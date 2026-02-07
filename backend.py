@@ -7,6 +7,9 @@ import logging
 app = Flask(__name__)
 CORS(app)
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+
 # Initialize the library
 library = MedicalDataLibrary()
 
@@ -42,30 +45,27 @@ init_mock_data()
 
 # --- ROUTES ---
 
-@app.route('/forgot-password', methods=['POST'])
-def forgot_password():
+@app.route("/")
+def health_check():
+    """Endpoint for Render to verify the service is running."""
+    return jsonify({
+        "status": "healthy",
+        "fernet_key_set": os.environ.get('FERNET_KEY') is not None
+    })
+
+@app.route('/login', methods=['POST'])
+def login():
+    """Handles user authentication."""
     data = request.get_json()
-    email = data.get('email')
-    
-    # Use your library to find the patient by email (simulated)
-    if email == "john@example.com":
-        # In a real app, you'd generate a real PDF. Here we mock the call.
-        library.send_email_with_attachment(
-            to_email=email,
-            subject="Password Reset Request",
-            body="Attached are your instructions to reset your MediRecords Pro password.",
-            file_path="reset_instructions.pdf" # Mock path
-        )
-        return jsonify(success=True, message="Reset instructions sent to your email.")
-    
-    return jsonify(success=False, message="Email not found."), 404
-    
+    if data.get('email') == "john@example.com" and data.get('password') == "securepassword":
+        return jsonify(success=True, message="Login successful")
+    return jsonify(success=False, message="Invalid credentials"), 401
+
 @app.route('/forgot-password', methods=['POST'])
 def forgot_password():
     """
     Simulates a password reset request.
-    It verifies the email, triggers the encryption library, 
-    and mocks sending an email with an attachment.
+    It verifies the email and triggers the encryption library email mock.
     """
     data = request.get_json()
     email = data.get('email')
@@ -73,8 +73,6 @@ def forgot_password():
     if not email:
         return jsonify(success=False, message="Email is required"), 400
 
-    # In a real app, you would query your database for this user.
-    # For the demo, we use the John Doe email from your library.
     if email == "john@example.com":
         try:
             # Using your library logic to simulate sending the reset file
@@ -90,24 +88,10 @@ def forgot_password():
             return jsonify(success=False, message="Failed to process request"), 500
 
     return jsonify(success=False, message="Email address not found"), 404
-    
-@app.route("/")
-def health_check():
-    return jsonify({
-        "status": "healthy",
-        "fernet_key_set": os.environ.get('FERNET_KEY') is not None
-    })
-
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    if data.get('email') == "john@example.com" and data.get('password') == "securepassword":
-        return jsonify(success=True, message="Login successful")
-    return jsonify(success=False, message="Invalid credentials"), 401
 
 @app.route('/patients', methods=['GET'])
 def get_patients():
-    # Formats the library data for your MedicalRecordsScreen ListView
+    """Returns a list of patients for the MedicalRecordsScreen."""
     patient_list = []
     for ssn, patient in library.patients.items():
         patient_list.append({
@@ -120,14 +104,14 @@ def get_patients():
 
 @app.route('/appointments', methods=['GET'])
 def get_appointments():
-    # Hardcoded for the demo user, but pulls from the library records
+    """Returns scheduled events for the CalendarScreen."""
     patient = library.get_patient_by_ssn("123-45-6789")
     if not patient:
         return jsonify({}), 404
 
     formatted_events = {}
     for record in patient.medical_records:
-        # Normalize date to the format TableCalendar expects (YYYY-MM-DDT00:00:00Z)
+        # Format date for Flutter TableCalendar (YYYY-MM-DDT00:00:00Z)
         date_key = record.date.strftime('%Y-%m-%dT00:00:00Z')
         event = {
             'title': f"{record.provider} – {record.specialty}",
@@ -141,6 +125,9 @@ def get_appointments():
     return jsonify(formatted_events)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # Use environment port for Render deployment
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
 
 
