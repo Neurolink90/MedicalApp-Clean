@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-
-// Ensure this path matches exactly where your file is located
 import 'medical_records_screen.dart'; 
 
 class LoginScreen extends StatefulWidget {
@@ -19,10 +17,10 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscureText = true;
 
-  // Targeting your Render backend for production
+  // Targeting your Render backend
   final String backendUrl = kIsWeb
-      ? "https://medicalapp-clean.onrender.com/login"   // Live production URL
-      : "http://10.0.2.2:5000/login";                    // Local debug for Android emulator
+      ? "https://medicalapp-clean.onrender.com"
+      : "http://10.0.2.2:5000";
 
   Future<void> _login() async {
     final email = _emailController.text.trim();
@@ -37,51 +35,60 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       final response = await http.post(
-        Uri.parse(backendUrl),
+        Uri.parse("$backendUrl/login"),
         headers: {"Content-Type": "application/json"},
         body: jsonEncode({"email": email, "password": password}),
-      ).timeout(const Duration(seconds: 30)); // Increased timeout for Render "cold starts"
+      ).timeout(const Duration(seconds: 30));
 
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data["success"] == true) {
-          _showSnackBar("Welcome back, Doctor!", Colors.green);
-          
-          // Small delay so user sees the success message
-          await Future.delayed(const Duration(milliseconds: 800));
-          
+          _showSnackBar("Welcome back!", Colors.green);
+          await Future.delayed(const Duration(milliseconds: 500));
           if (mounted) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(
-                // Corrected: MedicalRecordsScreen is not a const because it contains non-const lists
-                builder: (_) => const MedicalRecordsScreen(), 
-              ),
+              MaterialPageRoute(builder: (_) => const MedicalRecordsScreen()),
             );
           }
-        } else {
-          _showSnackBar("Invalid credentials", Colors.orange);
         }
       } else {
-        _showSnackBar("Server error: ${response.statusCode}", Colors.red);
+        _showSnackBar("Invalid credentials", Colors.orange);
       }
     } catch (e) {
-      // Free-tier Render instances take ~30s to "wake up" on first load
-      _showSnackBar("Connection failed. Backend may be waking up—please try again.", Colors.red);
+      _showSnackBar("Connection failed. Try again.", Colors.red);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // FIXED: This is now correctly inside the class
+  Future<void> _handleForgotPassword() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      _showSnackBar("Please enter your email first", Colors.orange);
+      return;
+    }
+
+    try {
+      final response = await http.post(
+        Uri.parse("$backendUrl/forgot-password"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"email": email}),
+      );
+
+      final data = jsonDecode(response.body);
+      _showSnackBar(data["message"], data["success"] ? Colors.green : Colors.red);
+    } catch (e) {
+      _showSnackBar("Error connecting to server", Colors.red);
+    }
+  }
+
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: color,
-        duration: const Duration(seconds: 4),
-      ),
+      SnackBar(content: Text(message), backgroundColor: color),
     );
   }
 
@@ -98,23 +105,11 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 Icon(Icons.local_hospital_rounded, size: 100, color: Colors.blue[700]),
                 const SizedBox(height: 24),
-                Text(
-                  "MediRecords Pro",
-                  style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.blue[900]),
-                ),
-                const SizedBox(height: 8),
-                Text("Secure Patient Management System", style: TextStyle(fontSize: 16, color: Colors.grey[600])),
+                const Text("MediRecords Pro", style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 60),
                 TextField(
                   controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: InputDecoration(
-                    labelText: "Email",
-                    prefixIcon: const Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.grey[50],
-                  ),
+                  decoration: const InputDecoration(labelText: "Email", prefixIcon: Icon(Icons.email)),
                 ),
                 const SizedBox(height: 20),
                 TextField(
@@ -122,14 +117,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   obscureText: _obscureText,
                   decoration: InputDecoration(
                     labelText: "Password",
-                    prefixIcon: const Icon(Icons.lock_outline),
+                    prefixIcon: const Icon(Icons.lock),
                     suffixIcon: IconButton(
                       icon: Icon(_obscureText ? Icons.visibility_off : Icons.visibility),
                       onPressed: () => setState(() => _obscureText = !_obscureText),
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                    filled: true,
-                    fillColor: Colors.grey[50],
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -138,25 +130,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   height: 56,
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _login,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue[700],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 4,
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3),
-                          )
-                        : const Text("LOGIN", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                    child: _isLoading ? const CircularProgressIndicator() : const Text("LOGIN"),
                   ),
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  "Demo: john@example.com / securepassword",
-                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                const SizedBox(height: 16),
+                // FIXED: This TextButton is now inside the Column
+                TextButton(
+                  onPressed: _handleForgotPassword,
+                  child: const Text("Forgot Password?", style: TextStyle(color: Colors.blue)),
                 ),
+                const SizedBox(height: 24),
+                const Text("Demo: john@example.com / securepassword"),
               ],
             ),
           ),
@@ -164,31 +148,4 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
-// Add this function inside _LoginScreenState
-Future<void> _handleForgotPassword() async {
-  final email = _emailController.text.trim();
-  if (email.isEmpty) {
-    _showSnackBar("Please enter your email first", Colors.orange);
-    return;
-  }
-
-  try {
-    final response = await http.post(
-      Uri.parse("https://medicalapp-clean.onrender.com/forgot-password"),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"email": email}),
-    );
-
-    final data = jsonDecode(response.body);
-    _showSnackBar(data["message"], data["success"] ? Colors.green : Colors.red);
-  } catch (e) {
-    _showSnackBar("Error connecting to server", Colors.red);
-  }
-}
-
-// Inside the build method, add this TextButton below your Login button:
-TextButton(
-  onPressed: _handleForgotPassword,
-  child: const Text("Forgot Password?", style: TextStyle(color: Colors.blue)),
-),
 }
