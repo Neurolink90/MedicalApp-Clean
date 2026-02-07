@@ -164,4 +164,31 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
     );
   }
+// Add this function inside _LoginScreenState
+Future<void> _handleForgotPassword() async {
+  final email = _emailController.text.trim();
+  if (email.isEmpty) {
+    _showSnackBar("Please enter your email first", Colors.orange);
+    return;
+  }
+
+  try {
+    final response = await http.post(
+      Uri.parse("https://medicalapp-clean.onrender.com/forgot-password"),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"email": email}),
+    );
+
+    final data = jsonDecode(response.body);
+    _showSnackBar(data["message"], data["success"] ? Colors.green : Colors.red);
+  } catch (e) {
+    _showSnackBar("Error connecting to server", Colors.red);
+  }
+}
+
+// Inside the build method, add this TextButton below your Login button:
+TextButton(
+  onPressed: _handleForgotPassword,
+  child: const Text("Forgot Password?", style: TextStyle(color: Colors.blue)),
+),
 }
