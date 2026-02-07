@@ -1,11 +1,5 @@
-# Core web framework
 Flask==3.1.2
-
-# CORS support for cross-origin requests from GitHub Pages frontend
 flask-cors==6.0.1
-
-# Encryption for secure data handling
 cryptography==46.0.3
-
-# Production WSGI HTTP server (required for Render deployment)
 gunicorn==23.0.0
+reportlab
