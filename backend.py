@@ -133,9 +133,39 @@ def get_appointments():
         formatted_events[date_key].append({'title': f"{record.provider} – {record.specialty}", 'time': "10:00 AM", 'type': 'appointment'})
     return jsonify(formatted_events)
 
+# --- PROFILE ROUTES (New) ---
+
+@app.route('/profile', methods=['GET'])
+def get_profile():
+    """Fetches the logged-in user's profile (Mocked as John Doe)."""
+    # In a real app, you'd get the ID from the session/token
+    patient = library.get_patient_by_ssn("123-45-6789")
+    if patient:
+        return jsonify({
+            "name": patient.name,
+            "address": patient.address,
+            "phone": patient.phone,
+            "email": patient.email,
+            "dob": patient.dob.strftime('%Y-%m-%d')
+        })
+    return jsonify(message="User not found"), 404
+
+@app.route('/profile', methods=['POST'])
+def update_profile():
+    """Updates the logged-in user's contact details."""
+    data = request.get_json()
+    patient = library.get_patient_by_ssn("123-45-6789")
+    
+    if patient:
+        # Update only allowed fields (Security best practice)
+        if 'name' in data: patient.name = data['name']
+        if 'address' in data: patient.address = data['address']
+        if 'phone' in data: patient.phone = data['phone']
+        
+        app.logger.info(f"Updated profile for {patient.email}")
+        return jsonify(success=True, message="Profile updated successfully!")
+    
+    return jsonify(success=False, message="User not found"), 404
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
-
-
-
