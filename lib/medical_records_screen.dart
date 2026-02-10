@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'calendar_screen.dart'; // Ensure you have this import for the calendar button
-import 'login_screen.dart';   // <--- Added for Logout navigation
+import 'calendar_screen.dart';
+import 'login_screen.dart';
+import 'profile_screen.dart'; // <--- Import the new Profile Screen
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -30,15 +31,17 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     try {
       final response = await http.get(Uri.parse("$backendUrl/patients"));
       if (response.statusCode == 200) {
-        setState(() {
-          _patients = jsonDecode(response.body);
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _patients = jsonDecode(response.body);
+            _isLoading = false;
+          });
+        }
       } else {
         throw Exception("Failed to load");
       }
     } catch (e) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -57,10 +60,12 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       appBar: AppBar(
         title: const Text("Patient Records"),
         backgroundColor: Colors.blue[700],
+        foregroundColor: Colors.white, // Ensures icons/text are white
         actions: [
-          // Calendar Button
+          // 1. Calendar Button
           IconButton(
             icon: const Icon(Icons.calendar_month),
+            tooltip: "View Schedule",
             onPressed: () {
               Navigator.push(
                 context,
@@ -68,7 +73,21 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               );
             },
           ),
-          // NEW: Logout Button
+          
+          // 2. NEW: Profile Button
+          IconButton(
+            icon: const Icon(Icons.person),
+            tooltip: "Edit Profile",
+            onPressed: () {
+              // Navigate to Profile and refresh data when returning
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              ).then((_) => _fetchPatients()); 
+            },
+          ),
+
+          // 3. Logout Button
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: "Logout",
