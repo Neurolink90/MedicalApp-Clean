@@ -6,6 +6,7 @@ import logging
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from datetime import datetime
+from werkzeug.security import generate_password_hash, check_password_hash  # <--- SECURITY UPGRADE
 
 app = Flask(__name__)
 CORS(app)
@@ -19,7 +20,7 @@ DB_NAME = "medical_app.db"
 def get_db():
     """Connect to the SQLite database."""
     conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row  # Allows accessing columns by name
+    conn.row_factory = sqlite3.Row
     return conn
 
 def init_db():
@@ -60,10 +61,13 @@ def init_db():
     cursor.execute('SELECT * FROM patients WHERE email = ?', ("john@example.com",))
     if not cursor.fetchone():
         app.logger.info("Seeding demo user: John Doe")
+        # SECURITY: Hash the password before saving!
+        hashed_pw = generate_password_hash("securepassword")
+        
         cursor.execute('''
             INSERT INTO patients (name, dob, ssn, address, email, phone, password)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', ("John Doe", "1980-01-01", "123-45-6789", "123 Main St", "john@example.com", "555-1234", "securepassword"))
+        ''', ("John Doe", "1980-01-01", "123-45-6789", "123 Main St", "john@example.com", "555-1234", hashed_pw))
         
         # Seed Records
         cursor.execute('INSERT INTO medical_records (patient_email, date, provider, specialty, content) VALUES (?, ?, ?, ?, ?)',
@@ -76,6 +80,13 @@ def init_db():
 
 # Initialize DB on startup
 init_db()
+
+# --- HELPER: Fixes the "Bytes" Error ---
+def clean_text(value):
+    """Converts bytes to string if needed, preventing JSON errors."""
+    if isinstance(value, bytes):
+        return value.decode('utf-8')
+    return str(value) if value else ""
 
 # --- PDF GENERATOR HELPER ---
 def create_reset_pdf(filename, user_email):
@@ -102,23 +113,24 @@ def login():
     user = conn.execute('SELECT * FROM patients WHERE email = ?', (email,)).fetchone()
     conn.close()
 
-    if user and user['password'] == password:
+    # SECURITY: Verify the hash instead of plain text
+    if user and check_password_hash(user['password'], password):
         return jsonify(success=True, message="Login successful")
+    
     return jsonify(success=False, message="Invalid credentials"), 401
 
 @app.route('/profile', methods=['GET'])
 def get_profile():
-    # Fetch John Doe (In real app, fetch by Session ID)
     conn = get_db()
     user = conn.execute('SELECT * FROM patients WHERE email = ?', ("john@example.com",)).fetchone()
     conn.close()
 
     if user:
         return jsonify({
-            "name": user['name'],
-            "address": user['address'],
-            "phone": user['phone'],
-            "email": user['email'],
+            "name": clean_text(user['name']),
+            "address": clean_text(user['address']),
+            "phone": clean_text(user['phone']),
+            "email": clean_text(user['email']),
             "dob": user['dob']
         })
     return jsonify(message="User not found"), 404
@@ -151,9 +163,9 @@ def get_patients():
     patient_list = []
     for user in users:
         patient_list.append({
-            "name": user['name'],
+            "name": clean_text(user['name']),
             "dob": user['dob'],
-            "mrn": f"MRN-{user['ssn'][-4:]}", # Last 4 of SSN
+            "mrn": f"MRN-{user['ssn'][-4:]}",
             "status": "Stable"
         })
     return jsonify(patient_list)
@@ -189,22 +201,44 @@ def download_instructions():
 
 @app.route('/appointments', methods=['GET'])
 def get_appointments():
-    # Fetch appointments for John
     conn = get_db()
     records = conn.execute('SELECT * FROM medical_records WHERE patient_email = ?', ("john@example.com",)).fetchall()
     conn.close()
 
     formatted_events = {}
     for record in records:
-        # Convert date string to ISO format for Calendar
         date_key = f"{record['date']}T00:00:00Z" 
         if date_key not in formatted_events: formatted_events[date_key] = []
         formatted_events[date_key].append({
-            'title': f"{record['provider']} – {record['specialty']}",
+            'title': f"{clean_text(record['provider'])} – {clean_text(record['specialty'])}",
             'time': "10:00 AM",
             'type': 'appointment'
         })
     return jsonify(formatted_events)
+
+@app.route('/reset-password', methods=['POST'])
+def reset_password():
+    data = request.get_json()
+    email = data.get('email')
+    new_password = data.get('new_password')
+    
+    # SECURITY: Hash the new password before updating DB
+    hashed_pw = generate_password_hash(new_password)
+
+    conn = get_db()
+    try:
+        conn.execute('''
+            UPDATE patients 
+            SET password = ?
+            WHERE email = ?
+        ''', (hashed_pw, email))
+        conn.commit()
+        return jsonify(success=True, message="Password updated successfully. Please login.")
+    except Exception as e:
+        app.logger.error(f"Reset Error: {e}")
+        return jsonify(success=False, message="Failed to update password"), 500
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
