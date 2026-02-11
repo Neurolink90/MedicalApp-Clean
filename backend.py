@@ -31,6 +31,13 @@ def init_mock_data():
 
 init_mock_data()
 
+# --- HELPER: Fixes the "Bytes" Error ---
+def clean_text(value):
+    """Converts bytes to string if needed, preventing JSON errors."""
+    if isinstance(value, bytes):
+        return value.decode('utf-8') # Turn b'John' into 'John'
+    return str(value) if value else ""
+
 # --- PDF GENERATOR HELPER ---
 def create_reset_pdf(filename, user_email):
     c = canvas.Canvas(filename, pagesize=letter)
@@ -80,7 +87,6 @@ def forgot_password():
 
     return jsonify(success=False, message="Email not found"), 404
 
-# --- NEW ROUTE: FIXES THE 404 ERROR ---
 @app.route('/download-instructions', methods=['GET'])
 def download_instructions():
     """Endpoint to download the generated PDF."""
@@ -95,7 +101,6 @@ def download_instructions():
     except Exception as e:
         app.logger.error(f"Download error: {e}")
         return jsonify(error=str(e)), 500
-# --------------------------------------
 
 @app.route('/reset-password', methods=['POST'])
 def reset_password():
@@ -103,7 +108,6 @@ def reset_password():
     email = data.get('email')
     new_password = data.get('new_password')
     
-    # Mocking the update - in a real DB you would run an UPDATE query here
     if email == "john@example.com" and new_password:
         app.logger.info(f"Password for {email} updated to {new_password}")
         return jsonify(success=True, message="Password updated successfully. Please login.")
@@ -114,8 +118,9 @@ def reset_password():
 def get_patients():
     patient_list = []
     for ssn, patient in library.patients.items():
+        # Use clean_text to prevent crashes
         patient_list.append({
-            "name": patient.name,
+            "name": clean_text(patient.name),
             "dob": patient.dob.strftime('%Y-%m-%d'),
             "mrn": f"MRN-{ssn[-4:]}",
             "status": "Stable"
@@ -130,22 +135,27 @@ def get_appointments():
     for record in patient.medical_records:
         date_key = record.date.strftime('%Y-%m-%dT00:00:00Z')
         if date_key not in formatted_events: formatted_events[date_key] = []
-        formatted_events[date_key].append({'title': f"{record.provider} – {record.specialty}", 'time': "10:00 AM", 'type': 'appointment'})
+        # Use clean_text here too
+        formatted_events[date_key].append({
+            'title': f"{clean_text(record.provider)} – {clean_text(record.specialty)}", 
+            'time': "10:00 AM", 
+            'type': 'appointment'
+        })
     return jsonify(formatted_events)
 
 # --- PROFILE ROUTES (New) ---
 
 @app.route('/profile', methods=['GET'])
 def get_profile():
-    """Fetches the logged-in user's profile (Mocked as John Doe)."""
-    # In a real app, you'd get the ID from the session/token
+    """Fetches the logged-in user's profile."""
     patient = library.get_patient_by_ssn("123-45-6789")
     if patient:
+        # CRITICAL FIX: Wrapped fields in clean_text()
         return jsonify({
-            "name": patient.name,
-            "address": patient.address,
-            "phone": patient.phone,
-            "email": patient.email,
+            "name": clean_text(patient.name),
+            "address": clean_text(patient.address),
+            "phone": clean_text(patient.phone),
+            "email": clean_text(patient.email),
             "dob": patient.dob.strftime('%Y-%m-%d')
         })
     return jsonify(message="User not found"), 404
@@ -157,7 +167,6 @@ def update_profile():
     patient = library.get_patient_by_ssn("123-45-6789")
     
     if patient:
-        # Update only allowed fields (Security best practice)
         if 'name' in data: patient.name = data['name']
         if 'address' in data: patient.address = data['address']
         if 'phone' in data: patient.phone = data['phone']
