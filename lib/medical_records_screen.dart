@@ -4,7 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'calendar_screen.dart';
 import 'login_screen.dart';
-import 'profile_screen.dart'; // <--- Import the new Profile Screen
+import 'profile_screen.dart';
+import 'documents_screen.dart'; // <--- NEW: Import Documents Screen
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -46,7 +47,6 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   void _logout() {
-    // Navigate back to Login and remove all previous routes from the stack
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -60,9 +60,21 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       appBar: AppBar(
         title: const Text("Patient Records"),
         backgroundColor: Colors.blue[700],
-        foregroundColor: Colors.white, // Ensures icons/text are white
+        foregroundColor: Colors.white,
         actions: [
-          // 1. Calendar Button
+          // 1. My Documents Button (NEW)
+          IconButton(
+            icon: const Icon(Icons.folder_shared),
+            tooltip: "My Documents",
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DocumentsScreen())
+              );
+            },
+          ),
+
+          // 2. Calendar Button
           IconButton(
             icon: const Icon(Icons.calendar_month),
             tooltip: "View Schedule",
@@ -74,12 +86,11 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             },
           ),
           
-          // 2. NEW: Profile Button
+          // 3. Profile Button
           IconButton(
             icon: const Icon(Icons.person),
             tooltip: "Edit Profile",
             onPressed: () {
-              // Navigate to Profile and refresh data when returning
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const ProfileScreen()),
@@ -87,7 +98,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             },
           ),
 
-          // 3. Logout Button
+          // 4. Logout Button
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: "Logout",

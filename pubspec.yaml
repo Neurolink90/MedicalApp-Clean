@@ -17,14 +17,16 @@ dependencies:
   table_calendar: ^3.1.2
   flutter_local_notifications: ^17.2.2
   intl: ^0.19.0
-  url_launcher: ^6.2.5  # <--- Essential for your PDF download button
+  url_launcher: ^6.2.5
+  file_picker: ^8.0.0  # <--- NEW: For selecting files
+  mime: ^1.0.4         # <--- NEW: For identifying file types
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0  # <--- Safe version. ^6.0.0 often fails on older Flutter SDKs
+  flutter_lints: ^4.0.0
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/  # <--- Must be indented 2 spaces under 'assets'
+    - assets/
