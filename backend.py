@@ -24,13 +24,13 @@ def init_db():
     conn = get_db()
     cursor = conn.cursor()
     
-    # 1. Users Table
+    # 1. Patients Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS patients (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             dob TEXT,
-            ssn TEXT UNIQUE,
+            ssn TEXT,
             address TEXT,
             email TEXT UNIQUE NOT NULL,
             phone TEXT,
@@ -38,7 +38,7 @@ def init_db():
         )
     ''')
 
-    # 2. Medical Records Table (Structured Data)
+    # 2. Medical Records Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS medical_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +51,7 @@ def init_db():
         )
     ''')
     
-    # 3. NEW: Documents Table (Files/BLOBs)
+    # 3. Documents Table
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,18 +65,6 @@ def init_db():
     ''')
     
     conn.commit()
-    
-    # Seed Demo User
-    cursor.execute('SELECT * FROM patients WHERE email = ?', ("john@example.com",))
-    if not cursor.fetchone():
-        app.logger.info("Seeding demo user...")
-        hashed_pw = generate_password_hash("securepassword")
-        cursor.execute('''
-            INSERT INTO patients (name, dob, ssn, address, email, phone, password)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', ("John Doe", "1980-01-01", "123-45-6789", "123 Main St", "john@example.com", "555-1234", hashed_pw))
-        conn.commit()
-    
     conn.close()
 
 init_db()
@@ -86,6 +74,33 @@ init_db()
 @app.route("/")
 def health_check():
     return jsonify({"status": "healthy"})
+
+# --- PHASE 1: NEW REGISTER ROUTE ---
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    password = data.get('password')
+    dob = data.get('dob', '1990-01-01')
+
+    if not email or not password:
+        return jsonify(success=False, message="Email and Password required"), 400
+
+    hashed_pw = generate_password_hash(password)
+    
+    conn = get_db()
+    try:
+        conn.execute('''
+            INSERT INTO patients (name, email, password, dob)
+            VALUES (?, ?, ?, ?)
+        ''', (name, email, hashed_pw, dob))
+        conn.commit()
+        return jsonify(success=True, message="User registered successfully!")
+    except sqlite3.IntegrityError:
+        return jsonify(success=False, message="Email already exists"), 400
+    finally:
+        conn.close()
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -98,90 +113,91 @@ def login():
     conn.close()
 
     if user and check_password_hash(user['password'], password):
-        return jsonify(success=True, message="Login successful")
+        return jsonify(success=True, message="Login successful", user_email=email)
     return jsonify(success=False, message="Invalid credentials"), 401
 
-# --- NEW: DOCUMENT ROUTES ---
-
-@app.route('/documents/upload', methods=['POST'])
-def upload_document():
-    if 'file' not in request.files:
-        return jsonify(success=False, message="No file part"), 400
+@app.route('/patients', methods=['GET'])
+def get_patients():
+    conn = get_db()
+    users = conn.execute('SELECT name, dob, ssn, email FROM patients').fetchall()
+    conn.close()
     
-    file = request.files['file']
-    patient_email = request.form.get('email', 'john@example.com') # Default to John for now
-
-    if file.filename == '':
-        return jsonify(success=False, message="No selected file"), 400
-
-    if file:
-        filename = file.filename
-        file_type = file.content_type
-        file_data = file.read() # Read raw bytes
-        upload_date = datetime.now().strftime('%Y-%m-%d')
-
-        conn = get_db()
-        try:
-            conn.execute('''
-                INSERT INTO documents (patient_email, filename, file_type, upload_date, file_data)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (patient_email, filename, file_type, upload_date, file_data))
-            conn.commit()
-            return jsonify(success=True, message="File uploaded successfully!")
-        except Exception as e:
-            app.logger.error(f"Upload Error: {e}")
-            return jsonify(success=False, message="Database error"), 500
-        finally:
-            conn.close()
-
-@app.route('/documents', methods=['GET'])
-def get_documents():
-    """List all documents for the user."""
-    conn = get_db()
-    docs = conn.execute('SELECT id, filename, file_type, upload_date FROM documents WHERE patient_email = ?', ("john@example.com",)).fetchall()
-    conn.close()
-
-    doc_list = []
-    for doc in docs:
-        doc_list.append({
-            "id": doc['id'],
-            "filename": doc['filename'],
-            "type": doc['file_type'],
-            "date": doc['upload_date']
+    patient_list = []
+    for user in users:
+        ssn_val = user['ssn'] if user['ssn'] else "000-00-0000"
+        patient_list.append({
+            "name": user['name'],
+            "dob": user['dob'],
+            "mrn": f"MRN-{ssn_val[-4:]}",
+            "status": "Stable",
+            "email": user['email']
         })
-    return jsonify(doc_list)
-
-@app.route('/documents/<int:doc_id>', methods=['GET'])
-def download_document(doc_id):
-    """Download a specific document by ID."""
-    conn = get_db()
-    doc = conn.execute('SELECT filename, file_data FROM documents WHERE id = ?', (doc_id,)).fetchone()
-    conn.close()
-
-    if doc:
-        return send_file(
-            io.BytesIO(doc['file_data']),
-            download_name=doc['filename'],
-            as_attachment=False # Open in browser/app instead of saving
-        )
-    return jsonify(message="File not found"), 404
-
-# --- EXISTING ROUTES (Profile, Patients, etc.) ---
-# (Kept short for brevity - assume previous Profile/Patient logic is here or just use your previous file)
+    return jsonify(patient_list)
 
 @app.route('/profile', methods=['GET'])
 def get_profile():
+    email = request.args.get('email', 'john@example.com')
     conn = get_db()
-    user = conn.execute('SELECT * FROM patients WHERE email = ?', ("john@example.com",)).fetchone()
+    user = conn.execute('SELECT * FROM patients WHERE email = ?', (email,)).fetchone()
     conn.close()
     if user:
-        # Simple decode helper
-        def clean(val): return val if val else ""
         return jsonify({
-            "name": clean(user['name']), "address": clean(user['address']),
-            "phone": clean(user['phone']), "email": clean(user['email']), "dob": user['dob']
+            "name": user['name'], "address": user['address'],
+            "phone": user['phone'], "email": user['email'], "dob": user['dob']
         })
     return jsonify(message="User not found"), 404
+
+@app.route('/profile', methods=['POST'])
+def update_profile():
+    data = request.get_json()
+    email = data.get('email', 'john@example.com')
+    
+    conn = get_db()
+    try:
+        conn.execute('''
+            UPDATE patients SET name=?, address=?, phone=? WHERE email=?
+        ''', (data['name'], data['address'], data['phone'], email))
+        conn.commit()
+        return jsonify(success=True)
+    except Exception as e:
+        return jsonify(success=False, message=str(e)), 500
+    finally:
+        conn.close()
+
+@app.route('/appointments', methods=['GET'])
+def get_appointments():
+    email = request.args.get('email', 'john@example.com')
+    conn = get_db()
+    records = conn.execute('SELECT * FROM medical_records WHERE patient_email = ?', (email,)).fetchall()
+    conn.close()
+
+    formatted_events = {}
+    for record in records:
+        date_key = f"{record['date']}T00:00:00Z"
+        if date_key not in formatted_events: formatted_events[date_key] = []
+        formatted_events[date_key].append({'title': f"{record['provider']} - {record['specialty']}", 'type': 'appointment'})
+    return jsonify(formatted_events)
+
+@app.route('/documents/upload', methods=['POST'])
+def upload_document():
+    file = request.files.get('file')
+    email = request.form.get('email', 'john@example.com')
+    if file:
+        conn = get_db()
+        conn.execute('INSERT INTO documents (patient_email, filename, file_type, upload_date, file_data) VALUES (?, ?, ?, ?, ?)',
+                     (email, file.filename, file.content_type, datetime.now().strftime('%Y-%m-%d'), file.read()))
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
+    return jsonify(success=False), 400
+
+@app.route('/documents', methods=['GET'])
+def get_documents():
+    email = request.args.get('email', 'john@example.com')
+    conn = get_db()
+    docs = conn.execute('SELECT id, filename, upload_date FROM documents WHERE patient_email = ?', (email,)).fetchall()
+    conn.close()
+    return jsonify([{"id": d['id'], "filename": d['filename'], "date": d['upload_date']} for d in docs])
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
