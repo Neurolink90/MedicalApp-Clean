@@ -5,7 +5,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'calendar_screen.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
-import 'documents_screen.dart'; // <--- NEW: Import Documents Screen
+import 'documents_screen.dart';
+import 'add_patient_screen.dart'; // <--- NEW: Import the Registration Screen
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -62,7 +63,22 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
-          // 1. My Documents Button (NEW)
+          // 1. ADD PATIENT BUTTON (NEW)
+          IconButton(
+            icon: const Icon(Icons.person_add),
+            tooltip: "Add New Patient",
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AddPatientScreen()),
+              );
+              if (result == true) {
+                _fetchPatients(); // Refresh list if a patient was added
+              }
+            },
+          ),
+
+          // 2. MY DOCUMENTS BUTTON
           IconButton(
             icon: const Icon(Icons.folder_shared),
             tooltip: "My Documents",
@@ -74,7 +90,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             },
           ),
 
-          // 2. Calendar Button
+          // 3. CALENDAR BUTTON
           IconButton(
             icon: const Icon(Icons.calendar_month),
             tooltip: "View Schedule",
@@ -86,7 +102,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             },
           ),
           
-          // 3. Profile Button
+          // 4. PROFILE BUTTON
           IconButton(
             icon: const Icon(Icons.person),
             tooltip: "Edit Profile",
@@ -98,7 +114,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             },
           ),
 
-          // 4. Logout Button
+          // 5. LOGOUT BUTTON
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: "Logout",
