@@ -6,7 +6,8 @@ import 'calendar_screen.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'documents_screen.dart';
-import 'add_patient_screen.dart'; // <--- NEW: Import the Registration Screen
+import 'add_patient_screen.dart';
+import 'trackers_screen.dart'; // <--- NEW: Import Trackers
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -39,20 +40,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             _isLoading = false;
           });
         }
-      } else {
-        throw Exception("Failed to load");
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  void _logout() {
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (route) => false,
-    );
   }
 
   @override
@@ -63,62 +54,41 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
-          // 1. ADD PATIENT BUTTON (NEW)
+          // 1. NEW: Health Trackers Button
+          IconButton(
+            icon: const Icon(Icons.monitor_heart),
+            tooltip: "Meds & Vitals",
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const TrackersScreen()));
+            },
+          ),
+
+          // 2. Add Patient
           IconButton(
             icon: const Icon(Icons.person_add),
-            tooltip: "Add New Patient",
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddPatientScreen()),
-              );
-              if (result == true) {
-                _fetchPatients(); // Refresh list if a patient was added
-              }
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPatientScreen())).then((_) => _fetchPatients()),
           ),
 
-          // 2. MY DOCUMENTS BUTTON
+          // 3. Documents
           IconButton(
             icon: const Icon(Icons.folder_shared),
-            tooltip: "My Documents",
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const DocumentsScreen())
-              );
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentsScreen())),
           ),
 
-          // 3. CALENDAR BUTTON
+          // 4. Calendar
           IconButton(
             icon: const Icon(Icons.calendar_month),
-            tooltip: "View Schedule",
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const CalendarScreen()),
-              );
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())),
           ),
           
-          // 4. PROFILE BUTTON
+          // 5. Profile & Logout
           IconButton(
             icon: const Icon(Icons.person),
-            tooltip: "Edit Profile",
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
-              ).then((_) => _fetchPatients()); 
-            },
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
           ),
-
-          // 5. LOGOUT BUTTON
           IconButton(
             icon: const Icon(Icons.logout),
-            tooltip: "Logout",
-            onPressed: _logout,
+            onPressed: () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false),
           ),
         ],
       ),
@@ -131,45 +101,15 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                 final patient = _patients[index];
                 return Card(
                   margin: const EdgeInsets.only(bottom: 16),
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: Colors.blue[100],
-                      child: Text(
-                        patient['name'][0],
-                        style: TextStyle(color: Colors.blue[800], fontWeight: FontWeight.bold),
-                      ),
-                    ),
+                    leading: CircleAvatar(child: Text(patient['name'][0])),
                     title: Text(patient['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text("DOB: ${patient['dob']} • ${patient['mrn']}"),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(Icons.circle, size: 10, color: _getStatusColor(patient['status'])),
-                            const SizedBox(width: 4),
-                            Text(patient['status'], style: TextStyle(color: _getStatusColor(patient['status']))),
-                          ],
-                        )
-                      ],
-                    ),
-                    trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                    subtitle: Text("DOB: ${patient['dob']} • ${patient['mrn']}"),
+                    trailing: const Icon(Icons.chevron_right),
                   ),
                 );
               },
             ),
     );
-  }
-
-  Color _getStatusColor(String? status) {
-    switch (status) {
-      case "Stable": return Colors.green;
-      case "Critical": return Colors.red;
-      case "Follow-up Needed": return Colors.orange;
-      default: return Colors.grey;
-    }
   }
 }
