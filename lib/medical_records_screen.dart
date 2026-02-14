@@ -7,7 +7,8 @@ import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'documents_screen.dart';
 import 'add_patient_screen.dart';
-import 'trackers_screen.dart'; // <--- NEW: Import Trackers
+import 'trackers_screen.dart';
+import 'provider_dashboard_screen.dart'; // <--- NEW: Import Dashboard
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -54,7 +55,16 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
-          // 1. NEW: Health Trackers Button
+          // 1. NEW: PROVIDER DASHBOARD BUTTON
+          IconButton(
+            icon: const Icon(Icons.admin_panel_settings),
+            tooltip: "Provider Portal",
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ProviderDashboard()));
+            },
+          ),
+          
+          // 2. Health Trackers Button
           IconButton(
             icon: const Icon(Icons.monitor_heart),
             tooltip: "Meds & Vitals",
@@ -63,25 +73,25 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             },
           ),
 
-          // 2. Add Patient
+          // 3. Add Patient
           IconButton(
             icon: const Icon(Icons.person_add),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPatientScreen())).then((_) => _fetchPatients()),
           ),
 
-          // 3. Documents
+          // 4. Documents
           IconButton(
             icon: const Icon(Icons.folder_shared),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentsScreen())),
           ),
 
-          // 4. Calendar
+          // 5. Calendar
           IconButton(
             icon: const Icon(Icons.calendar_month),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())),
           ),
           
-          // 5. Profile & Logout
+          // 6. Profile & Logout
           IconButton(
             icon: const Icon(Icons.person),
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
@@ -104,7 +114,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
                   child: ListTile(
                     leading: CircleAvatar(child: Text(patient['name'][0])),
                     title: Text(patient['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text("DOB: ${patient['dob']} • ${patient['mrn']}"),
+                    subtitle: Text("DOB: ${patient['dob']} • ${patient['mrn'] ?? 'N/A'}"),
                     trailing: const Icon(Icons.chevron_right),
                   ),
                 );
