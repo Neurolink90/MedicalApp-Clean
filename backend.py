@@ -9,13 +9,11 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# UPDATED CORS: Explicitly allows your GitHub Pages site to send files and data
+# Explicitly allows your GitHub Pages site to send files and data
 CORS(app, resources={r"/*": {"origins": ["https://neurolink90.github.io", "http://localhost:*"]}})
 
 logging.basicConfig(level=logging.INFO)
 DB_NAME = "medical_app.db"
-
-# --- DATABASE HELPERS ---
 
 def get_db():
     conn = sqlite3.connect(DB_NAME)
@@ -25,23 +23,17 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-    # 1. Patients Table
     cursor.execute('CREATE TABLE IF NOT EXISTS patients (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, dob TEXT, ssn TEXT, address TEXT, email TEXT UNIQUE NOT NULL, phone TEXT, password TEXT NOT NULL)')
-    # 2. Medications Table
     cursor.execute('CREATE TABLE IF NOT EXISTS medications (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_email TEXT, name TEXT, dosage TEXT, frequency TEXT, reminder_time TEXT)')
-    # 3. Vitals Table
     cursor.execute('CREATE TABLE IF NOT EXISTS vitals (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_email TEXT, type TEXT, value TEXT, unit TEXT, timestamp TEXT)')
-    # 4. Documents Table (for BLOB storage)
     cursor.execute('CREATE TABLE IF NOT EXISTS documents (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_email TEXT, filename TEXT, file_type TEXT, upload_date TEXT, file_data BLOB)')
-    # 5. Medical Records (for Calendar/Appointments)
     cursor.execute('CREATE TABLE IF NOT EXISTS medical_records (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_email TEXT, date TEXT, provider TEXT, specialty TEXT, content TEXT)')
-    
     conn.commit()
     conn.close()
 
 init_db()
 
-# --- AUTH & REGISTRATION ---
+# --- AUTH & PROFILES ---
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -68,7 +60,22 @@ def login():
         return jsonify(success=True, email=user['email'])
     return jsonify(success=False), 401
 
-# --- PROFILE & APPOINTMENTS ---
+@app.route('/patients', methods=['GET'])
+def get_patients():
+    conn = get_db()
+    users = conn.execute('SELECT name, dob, ssn, email FROM patients').fetchall()
+    conn.close()
+    patient_list = []
+    for user in users:
+        ssn_val = user['ssn'] if user['ssn'] else "000-00-0000"
+        patient_list.append({
+            "name": user['name'],
+            "dob": user['dob'],
+            "mrn": f"MRN-{ssn_val[-4:]}",
+            "status": "Stable",
+            "email": user['email']
+        })
+    return jsonify(patient_list)
 
 @app.route('/profile', methods=['GET', 'POST'])
 def handle_profile():
@@ -87,6 +94,8 @@ def handle_profile():
         conn.close()
         return jsonify(success=True)
 
+# --- TRACKERS & APPOINTMENTS ---
+
 @app.route('/appointments', methods=['GET'])
 def get_appointments():
     email = request.args.get('email', 'zach@example.com')
@@ -99,8 +108,6 @@ def get_appointments():
         if date_key not in formatted: formatted[date_key] = []
         formatted[date_key].append({'title': f"{r['provider']} - {r['specialty']}", 'type': 'appointment'})
     return jsonify(formatted)
-
-# --- TRACKERS (MEDS & VITALS) ---
 
 @app.route('/medications', methods=['GET', 'POST'])
 def handle_medications():
@@ -134,7 +141,7 @@ def handle_vitals():
         conn.close()
         return jsonify(success=True)
 
-# --- DOCUMENTS (FIXED UPLOAD) ---
+# --- DOCUMENTS & SHARING ---
 
 @app.route('/documents/upload', methods=['POST'])
 def upload_document():
@@ -158,12 +165,20 @@ def get_documents():
     conn.close()
     return jsonify([dict(doc) for doc in docs])
 
-# --- NEW: PROVIDER DASHBOARD ---
+@app.route('/share/<int:doc_id>', methods=['GET'])
+def share_document(doc_id):
+    conn = get_db()
+    doc = conn.execute('SELECT filename, file_data, file_type FROM documents WHERE id = ?', (doc_id,)).fetchone()
+    conn.close()
+    if doc:
+        return send_file(io.BytesIO(doc['file_data']), mimetype=doc['file_type'], as_attachment=False, download_name=doc['filename'])
+    return "<h1>Document Not Found</h1>", 404
+
+# --- PROVIDER DASHBOARD ---
 
 @app.route('/provider/dashboard', methods=['GET'])
 def provider_dashboard():
     conn = get_db()
-    # Pulls all patients and their latest recorded Blood Pressure
     summary = conn.execute('''
         SELECT p.name, p.email, p.dob, 
         (SELECT value FROM vitals WHERE patient_email = p.email AND type = 'Blood Pressure' ORDER BY timestamp DESC LIMIT 1) as last_bp
