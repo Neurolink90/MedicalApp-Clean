@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:qr_flutter/qr_flutter.dart'; // <--- QR Code Library
 
 class DocumentsScreen extends StatefulWidget {
   const DocumentsScreen({super.key});
@@ -20,6 +21,9 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   final String backendUrl = kIsWeb
       ? "https://medicalapp-clean.onrender.com"
       : "http://10.0.2.2:5000";
+  
+  // FIX: Explicitly setting the user to match your new login
+  final String userEmail = "zach@example.com"; 
 
   @override
   void initState() {
@@ -29,7 +33,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
   Future<void> _fetchDocuments() async {
     try {
-      final response = await http.get(Uri.parse("$backendUrl/documents"));
+      final response = await http.get(Uri.parse("$backendUrl/documents?email=$userEmail"));
       if (response.statusCode == 200) {
         setState(() {
           _documents = jsonDecode(response.body);
@@ -42,22 +46,19 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   }
 
   Future<void> _pickAndUploadFile() async {
-    // 1. Pick File
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'png', 'doc'],
-      withData: true, // Important for Web/Mobile compatibility
+      allowedExtensions: ['pdf', 'jpg', 'png'],
+      withData: true, // Required for Flutter Web
     );
 
     if (result != null) {
       setState(() => _isUploading = true);
       PlatformFile file = result.files.first;
 
-      // 2. Upload File
       var request = http.MultipartRequest('POST', Uri.parse("$backendUrl/documents/upload"));
-      request.fields['email'] = "john@example.com";
+      request.fields['email'] = userEmail; // FIX: Uploading to Zach's account
       
-      // Add file bytes to request
       request.files.add(http.MultipartFile.fromBytes(
         'file',
         file.bytes!,
@@ -68,12 +69,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         var response = await request.send();
         if (response.statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Upload Successful!"), backgroundColor: Colors.green));
-          _fetchDocuments(); // Refresh list
+          _fetchDocuments(); // Refresh the list
         } else {
-          throw Exception("Upload failed");
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Upload failed"), backgroundColor: Colors.red));
         }
       } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Upload Failed"), backgroundColor: Colors.red));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Upload Error"), backgroundColor: Colors.red));
       } finally {
         setState(() => _isUploading = false);
       }
@@ -81,10 +82,40 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   }
 
   void _openDocument(int id) async {
-    final Uri url = Uri.parse("$backendUrl/documents/$id");
+    final Uri url = Uri.parse("$backendUrl/share/$id");
     if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Could not open file")));
     }
+  }
+
+  // NEW: Generates a popup with a QR code for the doctor to scan
+  void _showShareQR(int id, String name) {
+    final shareUrl = "$backendUrl/share/$id";
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text("Share $name"),
+        content: SizedBox(
+          width: 250,
+          height: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Let your provider scan this code to view the record instantly.", textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              QrImageView(
+                data: shareUrl,
+                version: QrVersions.auto,
+                size: 200.0,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CLOSE")),
+        ],
+      ),
+    );
   }
 
   @override
@@ -104,9 +135,24 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                       child: ListTile(
                         leading: const Icon(Icons.description, color: Colors.blue),
                         title: Text(doc['filename'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text("Uploaded: ${doc['date']}"),
-                        trailing: const Icon(Icons.download),
-                        onTap: () => _openDocument(doc['id']),
+                        subtitle: Text("Uploaded: ${doc['upload_date'] ?? 'Recently'}"),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            // 1. Share via QR Code
+                            IconButton(
+                              icon: const Icon(Icons.qr_code_2, color: Colors.indigo),
+                              tooltip: "Share with Doctor",
+                              onPressed: () => _showShareQR(doc['id'], doc['filename']),
+                            ),
+                            // 2. Direct Download/View
+                            IconButton(
+                              icon: const Icon(Icons.download),
+                              tooltip: "View/Download",
+                              onPressed: () => _openDocument(doc['id']),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -116,6 +162,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
         label: _isUploading ? const Text("Uploading...") : const Text("Upload Record"),
         icon: _isUploading ? const SizedBox() : const Icon(Icons.upload_file),
         backgroundColor: Colors.blue[800],
+        foregroundColor: Colors.white,
       ),
     );
   }
