@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+
+// Screen Imports
 import 'calendar_screen.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
 import 'documents_screen.dart';
 import 'add_patient_screen.dart';
 import 'trackers_screen.dart';
-import 'provider_dashboard_screen.dart'; // <--- NEW: Import Dashboard
+import 'provider_dashboard_screen.dart'; 
+import 'inbox_screen.dart'; // <--- NEW: Import Inbox Screen
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -55,7 +58,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
-          // 1. NEW: PROVIDER DASHBOARD BUTTON
+          // 1. PROVIDER DASHBOARD BUTTON
           IconButton(
             icon: const Icon(Icons.admin_panel_settings),
             tooltip: "Provider Portal",
@@ -73,31 +76,47 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
             },
           ),
 
-          // 3. Add Patient
+          // 3. NEW: SECURE MESSAGING (INBOX) BUTTON
+          IconButton(
+            icon: const Icon(Icons.message),
+            tooltip: "Messages",
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const InboxScreen()));
+            },
+          ),
+
+          // 4. Add Patient
           IconButton(
             icon: const Icon(Icons.person_add),
+            tooltip: "Add Patient",
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPatientScreen())).then((_) => _fetchPatients()),
           ),
 
-          // 4. Documents
+          // 5. Documents
           IconButton(
             icon: const Icon(Icons.folder_shared),
+            tooltip: "My Documents",
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentsScreen())),
           ),
 
-          // 5. Calendar
+          // 6. Calendar
           IconButton(
             icon: const Icon(Icons.calendar_month),
+            tooltip: "Schedule",
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())),
           ),
           
-          // 6. Profile & Logout
+          // 7. Profile
           IconButton(
             icon: const Icon(Icons.person),
+            tooltip: "Profile",
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
           ),
+          
+          // 8. Logout
           IconButton(
             icon: const Icon(Icons.logout),
+            tooltip: "Logout",
             onPressed: () => Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const LoginScreen()), (r) => false),
           ),
         ],
