@@ -18,7 +18,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
   bool _isLoading = true;
   bool _isUploading = false;
 
-  final String backendUrl = kIsWeb ? "https://medicalapp-clean.onrender.com" : "http://10.0.2.2:5000";
+  final String backendUrl = kIsWeb
+      ? "https://medicalapp-clean.onrender.com"
+      : "http://10.0.2.2:5000";
+  
   final String userEmail = "zach@example.com"; 
 
   @override
@@ -27,21 +30,37 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     _fetchDocuments();
   }
 
+  // Helper for showing messages
+  void _showSnackBar(String message, {Color color = Colors.orange}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color, duration: const Duration(seconds: 3))
+    );
+  }
+
   Future<void> _fetchDocuments() async {
     try {
-      final response = await http.get(Uri.parse("$backendUrl/documents?email=$userEmail"));
+      // Added a timeout so it doesn't hang forever
+      final response = await http.get(Uri.parse("$backendUrl/documents?email=$userEmail")).timeout(const Duration(seconds: 15));
+      
       if (response.statusCode == 200) {
-        setState(() {
-          _documents = jsonDecode(response.body);
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _documents = jsonDecode(response.body);
+            _isLoading = false;
+          });
+        }
       } else if (response.statusCode == 401) {
-        _showSnackBar("Session reset. Trying to reconnect...");
-        Future.delayed(const Duration(seconds: 5), () => _fetchDocuments());
+        // FIX: Handle server resets gracefully
+        _showSnackBar("Server reset detected. Reconnecting...");
+        Future.delayed(const Duration(seconds: 5), _fetchDocuments);
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
-      _showSnackBar("Server is waking up...");
-      Future.delayed(const Duration(seconds: 5), () => _fetchDocuments());
+      // Catch network errors while server boots
+      _showSnackBar("Server is waking up. Please wait...", color: Colors.blue);
+      Future.delayed(const Duration(seconds: 5), _fetchDocuments);
     }
   }
 
@@ -49,50 +68,70 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'png'],
-      withData: true,
+      withData: true, 
     );
 
     if (result != null) {
       setState(() => _isUploading = true);
       PlatformFile file = result.files.first;
+
       var request = http.MultipartRequest('POST', Uri.parse("$backendUrl/documents/upload"));
-      request.fields['email'] = userEmail;
-      request.files.add(http.MultipartFile.fromBytes('file', file.bytes!, filename: file.name));
+      request.fields['email'] = userEmail; 
+      
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        file.bytes!,
+        filename: file.name,
+      ));
 
       try {
         var response = await request.send();
         if (response.statusCode == 200) {
-          _showSnackBar("Upload Successful!", isError: false);
-          _fetchDocuments();
+          _showSnackBar("Upload Successful!", color: Colors.green);
+          _fetchDocuments(); 
+        } else {
+          _showSnackBar("Upload failed", color: Colors.red);
         }
+      } catch (e) {
+        _showSnackBar("Upload Error", color: Colors.red);
       } finally {
         setState(() => _isUploading = false);
       }
     }
   }
 
-  void _showSnackBar(String msg, {bool isError = true}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? Colors.red : Colors.green,
-    ));
+  void _openDocument(int id) async {
+    final Uri url = Uri.parse("$backendUrl/share/$id");
+    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+      _showSnackBar("Could not open file", color: Colors.red);
+    }
   }
 
   void _showShareQR(int id, String name) {
+    final shareUrl = "$backendUrl/share/$id";
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text("Share $name"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Let your provider scan this code.", textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            QrImageView(data: "$backendUrl/share/$id", version: QrVersions.auto, size: 200.0),
-          ],
+        content: SizedBox(
+          width: 250,
+          height: 300,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Let your provider scan this code to view the record instantly.", textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              QrImageView(
+                data: shareUrl,
+                version: QrVersions.auto,
+                size: 200.0,
+              ),
+            ],
+          ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CLOSE"))],
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("CLOSE")),
+        ],
       ),
     );
   }
@@ -107,22 +146,39 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
               ? const Center(child: Text("No documents found. Upload one!"))
               : ListView.builder(
                   itemCount: _documents.length,
-                  itemBuilder: (context, i) => Card(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: ListTile(
-                      leading: const Icon(Icons.description, color: Colors.blue),
-                      title: Text(_documents[i]['filename']),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.qr_code_2, color: Colors.indigo),
-                        onPressed: () => _showShareQR(_documents[i]['id'], _documents[i]['filename']),
+                  itemBuilder: (context, index) {
+                    final doc = _documents[index];
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      child: ListTile(
+                        leading: const Icon(Icons.description, color: Colors.blue),
+                        title: Text(doc['filename'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text("Uploaded: ${doc['upload_date'] ?? 'Recently'}"),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.qr_code_2, color: Colors.indigo),
+                              tooltip: "Share with Doctor",
+                              onPressed: () => _showShareQR(doc['id'], doc['filename']),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.download),
+                              tooltip: "View/Download",
+                              onPressed: () => _openDocument(doc['id']),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isUploading ? null : _pickAndUploadFile,
-        label: Text(_isUploading ? "Uploading..." : "Upload Record"),
-        icon: const Icon(Icons.upload_file),
+        label: _isUploading ? const Text("Uploading...") : const Text("Upload Record"),
+        icon: _isUploading ? const SizedBox() : const Icon(Icons.upload_file),
+        backgroundColor: Colors.blue[800],
+        foregroundColor: Colors.white,
       ),
     );
   }
