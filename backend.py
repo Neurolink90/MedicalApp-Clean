@@ -29,8 +29,18 @@ def init_db():
     cursor.execute('CREATE TABLE IF NOT EXISTS documents (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_email TEXT, filename TEXT, file_type TEXT, upload_date TEXT, file_data BLOB)')
     cursor.execute('CREATE TABLE IF NOT EXISTS medical_records (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_email TEXT, date TEXT, provider TEXT, specialty TEXT, content TEXT)')
     
+    # --- NEW: MESSAGES TABLE ---
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_email TEXT,
+            receiver_email TEXT,
+            content TEXT,
+            timestamp TEXT
+        )
+    ''')
+
     # --- FIX: PERMANENT SEED FOR ZACH ---
-    # This guarantees your account survives server restarts and prevents login wipes.
     cursor.execute('SELECT * FROM patients WHERE email = ?', ("zach@example.com",))
     if not cursor.fetchone():
         hashed_pw = generate_password_hash("helloandgoodbye0")
@@ -38,8 +48,7 @@ def init_db():
             INSERT INTO patients (name, email, password, dob, address, phone) 
             VALUES (?, ?, ?, ?, ?, ?)
         ''', ("Zach SQLite", "zach@example.com", hashed_pw, "1980-01-01", "123 Main St", "555-1234"))
-    # ------------------------------------
-
+    
     conn.commit()
     conn.close()
 
@@ -198,6 +207,24 @@ def provider_dashboard():
     ''').fetchall()
     conn.close()
     return jsonify([dict(row) for row in summary])
+
+# --- NEW: COMMUNICATION MODULE ---
+
+@app.route('/messages', methods=['GET', 'POST'])
+def handle_messages():
+    email = request.args.get('email', 'zach@example.com')
+    conn = get_db()
+    if request.method == 'GET':
+        msgs = conn.execute('SELECT * FROM messages WHERE sender_email = ? OR receiver_email = ? ORDER BY timestamp DESC', (email, email)).fetchall()
+        conn.close()
+        return jsonify([dict(m) for m in msgs])
+    else:
+        data = request.get_json()
+        conn.execute('INSERT INTO messages (sender_email, receiver_email, content, timestamp) VALUES (?, ?, ?, ?)',
+                     (email, data['receiver_email'], data['content'], datetime.now().strftime('%Y-%m-%d %H:%M')))
+        conn.commit()
+        conn.close()
+        return jsonify(success=True)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
