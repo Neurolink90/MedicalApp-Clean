@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_messaging/firebase_messaging.dart'; // <--- NEW: Import Firebase
 
 // Screen Imports
 import 'calendar_screen.dart';
@@ -11,7 +12,7 @@ import 'documents_screen.dart';
 import 'add_patient_screen.dart';
 import 'trackers_screen.dart';
 import 'provider_dashboard_screen.dart'; 
-import 'inbox_screen.dart'; // <--- NEW: Import Inbox Screen
+import 'inbox_screen.dart';
 
 class MedicalRecordsScreen extends StatefulWidget {
   const MedicalRecordsScreen({super.key});
@@ -32,7 +33,46 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   void initState() {
     super.initState();
     _fetchPatients();
+    _setupNotifications(); // <--- NEW: Ask for permission when screen loads
   }
+
+  // --- NEW: NOTIFICATION SETUP LOGIC ---
+  Future<void> _setupNotifications() async {
+    try {
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+      // Request browser permission
+      NotificationSettings settings = await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        // Grab the unique device token
+        String? token = await messaging.getToken(
+          vapidKey: "BOM8_98..." // Replace with your actual Web Push Key from Firebase
+        );
+
+        if (token != null) {
+          debugPrint("FCM Token Captured: $token");
+          
+          // Send it to your Render backend
+          await http.post(
+            Uri.parse("$backendUrl/update-fcm-token"),
+            headers: {"Content-Type": "application/json"},
+            body: jsonEncode({
+              "email": "zach@example.com",
+              "token": token,
+            }),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint("Notification setup failed quietly: $e");
+    }
+  }
+  // -------------------------------------
 
   Future<void> _fetchPatients() async {
     try {
@@ -58,7 +98,6 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
         actions: [
-          // 1. PROVIDER DASHBOARD BUTTON
           IconButton(
             icon: const Icon(Icons.admin_panel_settings),
             tooltip: "Provider Portal",
@@ -66,8 +105,6 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const ProviderDashboard()));
             },
           ),
-          
-          // 2. Health Trackers Button
           IconButton(
             icon: const Icon(Icons.monitor_heart),
             tooltip: "Meds & Vitals",
@@ -75,8 +112,6 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const TrackersScreen()));
             },
           ),
-
-          // 3. NEW: SECURE MESSAGING (INBOX) BUTTON
           IconButton(
             icon: const Icon(Icons.message),
             tooltip: "Messages",
@@ -84,36 +119,26 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
               Navigator.push(context, MaterialPageRoute(builder: (_) => const InboxScreen()));
             },
           ),
-
-          // 4. Add Patient
           IconButton(
             icon: const Icon(Icons.person_add),
             tooltip: "Add Patient",
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPatientScreen())).then((_) => _fetchPatients()),
           ),
-
-          // 5. Documents
           IconButton(
             icon: const Icon(Icons.folder_shared),
             tooltip: "My Documents",
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DocumentsScreen())),
           ),
-
-          // 6. Calendar
           IconButton(
             icon: const Icon(Icons.calendar_month),
             tooltip: "Schedule",
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CalendarScreen())),
           ),
-          
-          // 7. Profile
           IconButton(
             icon: const Icon(Icons.person),
             tooltip: "Profile",
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
           ),
-          
-          // 8. Logout
           IconButton(
             icon: const Icon(Icons.logout),
             tooltip: "Logout",
