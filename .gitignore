@@ -21,3 +21,4 @@ web/
 *.gif
 *.pdf
 *.zip
+serviceAccountKey.json 

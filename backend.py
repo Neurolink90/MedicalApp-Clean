@@ -4,6 +4,8 @@ import sqlite3
 import os
 import io
 import logging
+import firebase_admin
+from firebase_admin import credentials, messaging
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 
@@ -14,6 +16,16 @@ CORS(app, resources={r"/*": {"origins": ["https://neurolink90.github.io", "http:
 
 logging.basicConfig(level=logging.INFO)
 DB_NAME = "medical_app.db"
+
+# --- FIREBASE INITIALIZATION ---
+# This looks for the service account key you download from the Firebase Console
+try:
+    if not firebase_admin._apps:
+        cred = credentials.Certificate("serviceAccountKey.json")
+        firebase_admin.initialize_app(cred)
+    logging.info("Firebase Admin SDK initialized successfully.")
+except Exception as e:
+    logging.warning(f"Firebase Admin could not be initialized. Push notifications disabled: {e}")
 
 def get_db():
     conn = sqlite3.connect(DB_NAME)
@@ -42,13 +54,13 @@ def init_db():
         )
     ''')
 
-    # 3. Safely add the Push Notification Token column if it doesn't exist yet
+    # 3. Safely add the Push Notification Token column
     try:
         cursor.execute('ALTER TABLE patients ADD COLUMN fcm_token TEXT')
     except sqlite3.OperationalError:
-        pass # Column already exists, safe to ignore
+        pass # Column already exists
 
-    # 4. PERMANENT SEED FOR ZACH (Prevents account wipes on Render restart)
+    # 4. PERMANENT SEED FOR ZACH
     cursor.execute('SELECT * FROM patients WHERE email = ?', ("zach@example.com",))
     if not cursor.fetchone():
         hashed_pw = generate_password_hash("helloandgoodbye0")
@@ -61,6 +73,25 @@ def init_db():
     conn.close()
 
 init_db()
+
+# --- NOTIFICATION ENGINE ---
+
+def send_push_notification(email, title, body):
+    """Retrieves a user's device token and sends a push notification."""
+    conn = get_db()
+    user = conn.execute('SELECT fcm_token FROM patients WHERE email = ?', (email,)).fetchone()
+    conn.close()
+    
+    if user and user['fcm_token']:
+        message = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            token=user['fcm_token']
+        )
+        try:
+            response = messaging.send(message)
+            logging.info(f"Notification sent successfully: {response}")
+        except Exception as e:
+            logging.error(f"FCM Send Error: {e}")
 
 # --- AUTH & PROFILES ---
 
@@ -183,6 +214,10 @@ def upload_document():
                      (email, file.filename, file.content_type, datetime.now().strftime('%Y-%m-%d'), file_data))
         conn.commit()
         conn.close()
+        
+        # --- TRIGGER THE PUSH NOTIFICATION ---
+        send_push_notification(email, "New Medical Record", f"'{file.filename}' has been added to your vault.")
+        
         return jsonify(success=True)
     return jsonify(success=False), 400
 
