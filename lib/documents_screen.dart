@@ -30,7 +30,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     _fetchDocuments();
   }
 
-  // Helper for showing messages
   void _showSnackBar(String message, {Color color = Colors.orange}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -40,7 +39,6 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
 
   Future<void> _fetchDocuments() async {
     try {
-      // Added a timeout so it doesn't hang forever
       final response = await http.get(Uri.parse("$backendUrl/documents?email=$userEmail")).timeout(const Duration(seconds: 15));
       
       if (response.statusCode == 200) {
@@ -51,14 +49,12 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           });
         }
       } else if (response.statusCode == 401) {
-        // FIX: Handle server resets gracefully
         _showSnackBar("Server reset detected. Reconnecting...");
         Future.delayed(const Duration(seconds: 5), _fetchDocuments);
       } else {
         if (mounted) setState(() => _isLoading = false);
       }
     } catch (e) {
-      // Catch network errors while server boots
       _showSnackBar("Server is waking up. Please wait...", color: Colors.blue);
       Future.delayed(const Duration(seconds: 5), _fetchDocuments);
     }
@@ -68,7 +64,7 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'png'],
-      withData: true, 
+      withData: true, // Crucial for Flutter Web uploads
     );
 
     if (result != null) {
@@ -90,10 +86,10 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
           _showSnackBar("Upload Successful!", color: Colors.green);
           _fetchDocuments(); 
         } else {
-          _showSnackBar("Upload failed", color: Colors.red);
+          _showSnackBar("Upload failed. Check backend logs.", color: Colors.red);
         }
       } catch (e) {
-        _showSnackBar("Upload Error", color: Colors.red);
+        _showSnackBar("Upload Error: Connection refused", color: Colors.red);
       } finally {
         setState(() => _isUploading = false);
       }
@@ -175,8 +171,8 @@ class _DocumentsScreenState extends State<DocumentsScreen> {
                 ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isUploading ? null : _pickAndUploadFile,
-        label: _isUploading ? const Text("Uploading...") : const Text("Upload Record"),
-        icon: _isUploading ? const SizedBox() : const Icon(Icons.upload_file),
+        label: Text(_isUploading ? "Uploading..." : "Upload Record"),
+        icon: _isUploading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.upload_file),
         backgroundColor: Colors.blue[800],
         foregroundColor: Colors.white,
       ),
