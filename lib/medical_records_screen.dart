@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'package:firebase_messaging/firebase_messaging.dart'; // <--- NEW: Import Firebase
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 // Screen Imports
 import 'calendar_screen.dart';
@@ -33,10 +33,10 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   void initState() {
     super.initState();
     _fetchPatients();
-    _setupNotifications(); // <--- NEW: Ask for permission when screen loads
+    _setupNotifications();
   }
 
-  // --- NEW: NOTIFICATION SETUP LOGIC ---
+  // --- NOTIFICATION SETUP LOGIC ---
   Future<void> _setupNotifications() async {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
@@ -49,9 +49,9 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       );
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        // Grab the unique device token
+        // Grab the unique device token using your real VAPID Key
         String? token = await messaging.getToken(
-          vapidKey: "BOM8_98..." // Replace with your actual Web Push Key from Firebase
+          vapidKey: "Y-8MX6fQIc9vD6JLqXswr4N2bui4dks9fDNNo27c0gA" 
         );
 
         if (token != null) {
