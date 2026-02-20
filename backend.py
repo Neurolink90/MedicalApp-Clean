@@ -18,7 +18,6 @@ logging.basicConfig(level=logging.INFO)
 DB_NAME = "medical_app.db"
 
 # --- FIREBASE INITIALIZATION ---
-# This looks for the service account key you download from the Firebase Console
 try:
     if not firebase_admin._apps:
         cred = credentials.Certificate("serviceAccountKey.json")
@@ -270,7 +269,7 @@ def update_fcm_token():
     conn.close()
     return jsonify(success=True)
 
-# --- NEW: TEMPORARY INJECTION ROUTE ---
+# --- TEMPORARY INJECTION ROUTE ---
 @app.route('/inject-token', methods=['GET'])
 def inject_token():
     email = request.args.get('email', 'zach@example.com')
@@ -295,6 +294,27 @@ def provider_dashboard():
     ''').fetchall()
     conn.close()
     return jsonify([dict(row) for row in summary])
+
+# --- TEMPORARY DIAGNOSTIC ROUTE (FREE ALTERNATIVE TO SHELL) ---
+@app.route('/debug/db-check', methods=['GET'])
+def debug_db_check():
+    try:
+        conn = get_db()
+        # Check Zach's record specifically
+        user = conn.execute('SELECT email, fcm_token FROM patients WHERE email = ?', ("zach@example.com",)).fetchone()
+        
+        # Also check all patients to ensure the table exists
+        all_patients = conn.execute('SELECT name, email FROM patients').fetchall()
+        conn.close()
+
+        result = {
+            "zach_record": dict(user) if user else "Not Found",
+            "total_patients": len(all_patients),
+            "all_patient_emails": [p['email'] for p in all_patients]
+        }
+        return jsonify(result)
+    except Exception as e:
+        return f"Database Error: {str(e)}", 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
