@@ -270,6 +270,19 @@ def update_fcm_token():
     conn.close()
     return jsonify(success=True)
 
+# --- NEW: TEMPORARY INJECTION ROUTE ---
+@app.route('/inject-token', methods=['GET'])
+def inject_token():
+    email = request.args.get('email', 'zach@example.com')
+    token = request.args.get('token')
+    if not token:
+        return "Error: Missing ?token= parameter", 400
+    conn = get_db()
+    conn.execute('UPDATE patients SET fcm_token = ? WHERE email = ?', (token, email))
+    conn.commit()
+    conn.close()
+    return f"Success! Token injected for {email}. Ready for test_push.py"
+
 # --- PROVIDER DASHBOARD ---
 
 @app.route('/provider/dashboard', methods=['GET'])
