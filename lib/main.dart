@@ -25,6 +25,8 @@ void main() async {
         measurementId: "G-61P8TKS1V2",
       ),
     );
+    debugPrint("Flutter Firebase layer initialized successfully");
+    
     // 3. Set background handler
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
