@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base href="$FLUTTER_BASE_HREF">
+  <base href="/MedicalApp-Clean/">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
@@ -17,6 +17,7 @@
   <title>medical_app</title>
   <link rel="manifest" href="manifest.json">
 
+  <!-- Firebase Modular SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getMessaging } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging.js";
@@ -35,23 +36,23 @@
     // Initialize Firebase using the modern approach
     const app = initializeApp(firebaseConfig);
     const messaging = getMessaging(app);
-    console.log("Firebase Modular SDK Successfully Initialized in HTML Head"); 
+    console.log("Firebase Modular SDK Successfully Initialized");
   </script>
 </head>
 <body>
   <script>
+    // Register Service Worker and save it for Flutter to use
     window.addEventListener('load', function(ev) {
       if ('serviceWorker' in navigator) {
-        // Adding the dot (./) tells the browser to look in the CURRENT folder
-        navigator.serviceWorker.register('./firebase-messaging-sw.js', {
-          scope: './'
-        })
-        .then((registration) => {
-          console.log('Service Worker successfully registered with scope: ', registration.scope);
-        })
-        .catch((err) => {
-          console.error('Service Worker registration failed: ', err);
-        });
+        navigator.serviceWorker.register('./firebase-messaging-sw.js')
+          .then((registration) => {
+            console.log('Service Worker registered with scope: ', registration.scope);
+            // THIS IS THE CRITICAL HANDOFF VARIABLE:
+            window.swReg = registration; 
+          })
+          .catch((err) => {
+            console.error('Service Worker registration failed: ', err);
+          });
       }
     });
   </script>

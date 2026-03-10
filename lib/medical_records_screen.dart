@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_messaging/firebase_messaging.dart';
+// CRITICAL: Import dart:js to access the browser's global variables
+import 'dart:js' as js; 
 
 // Screen Imports
 import 'calendar_screen.dart';
@@ -41,7 +43,7 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     try {
       FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-      // Request browser permission
+      // 1. Request browser permission
       NotificationSettings settings = await messaging.requestPermission(
         alert: true,
         badge: true,
@@ -49,9 +51,17 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
       );
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-        // Grab the unique device token using your real VAPID Key
+        // 2. Access the Global Service Worker registration from index.html
+        var swRegistration;
+        if (kIsWeb) {
+          swRegistration = js.context['swReg'];
+        }
+
+        // 3. Grab the unique device token using the saved registration
         String? token = await messaging.getToken(
-          vapidKey: "Y-8MX6fQIc9vD6JLqXswr4N2bui4dks9fDNNo27c0gA" 
+          vapidKey: "Y-8MX6fQIc9vD6JLqXswr4N2bui4dks9fDNNo27c0gA",
+          // Pass the browser's registration to prevent Flutter from causing a 404
+          serviceWorkerRegistration: swRegistration,
         );
 
         if (token != null) {
