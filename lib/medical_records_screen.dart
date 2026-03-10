@@ -37,42 +37,40 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
   }
 
   // --- NOTIFICATION SETUP LOGIC ---
-  Future<void> _setupNotifications() async {
-    try {
-      FirebaseMessaging messaging = FirebaseMessaging.instance;
+Future<void> _setupNotifications() async {
+  try {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
 
-      // 1. Request browser permission
-      NotificationSettings settings = await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
+    // 1. Request Permission
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // 2. Simply get the token. The index.html fix handles the 404.
+      String? token = await messaging.getToken(
+        vapidKey: "Y-8MX6fQIc9vD6JLqXswr4N2bui4dks9fDNNo27c0gA"
       );
 
-      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      if (token != null) {
+        debugPrint("FCM Token Captured: $token");
         
-        // 2. Grab the token directly
-        String? token = await messaging.getToken(
-          vapidKey: "Y-8MX6fQIc9vD6JLqXswr4N2bui4dks9fDNNo27c0gA",
+        await http.post(
+          Uri.parse("$backendUrl/update-fcm-token"),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({
+            "email": "zach@example.com",
+            "token": token,
+          }),
         );
-
-        if (token != null) {
-          debugPrint("FCM Token Captured: $token");
-          
-          // Send it to your Render backend
-          await http.post(
-            Uri.parse("$backendUrl/update-fcm-token"),
-            headers: {"Content-Type": "application/json"},
-            body: jsonEncode({
-              "email": "zach@example.com",
-              "token": token,
-            }),
-          );
-        }
       }
-    } catch (e) {
-      debugPrint("Notification setup failed quietly: $e");
     }
+  } catch (e) {
+    debugPrint("Notification setup failed: $e");
   }
+}
   // -------------------------------------
 
   Future<void> _fetchPatients() async {

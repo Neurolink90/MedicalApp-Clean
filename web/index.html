@@ -1,28 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <<base href="$FLUTTER_BASE_HREF">>
+  <!-- This line is the most important for GitHub Pages pathing -->
+  <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
-
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="medical_app">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
   <title>medical_app</title>
   <link rel="manifest" href="manifest.json">
 
-  <!-- Firebase Modular SDK -->
+  <!-- Firebase Configuration -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getMessaging } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging.js";
 
-    // Your specific Firebase Configuration
     const firebaseConfig = {
       apiKey: "AIzaSyDu-DaxMY4O_IaRyPKM7DVigyi7zo1IntA",
       authDomain: "medirecords-pro.firebaseapp.com",
@@ -33,30 +23,23 @@
       measurementId: "G-61P8TKS1V2"
     };
 
-    // Initialize Firebase using the modern approach
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
-    const messaging = getMessaging(app);
     console.log("Firebase Modular SDK Successfully Initialized");
   </script>
 </head>
 <body>
   <script>
-    // Register Service Worker and save it for Flutter to use
-    window.addEventListener('load', function(ev) {
-      if ('serviceWorker' in navigator) {
+    // This script helps the Firebase Plugin find its worker in a subfolder
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        // We use the relative path './' to stay inside /MedicalApp-Clean/
         navigator.serviceWorker.register('./firebase-messaging-sw.js')
-          .then((registration) => {
-            console.log('Service Worker registered with scope: ', registration.scope);
-            // THIS IS THE CRITICAL HANDOFF VARIABLE:
-            window.swReg = registration; 
-          })
-          .catch((err) => {
-            console.error('Service Worker registration failed: ', err);
-          });
-      }
-    });
+          .then((reg) => console.log('SW registered:', reg.scope))
+          .catch((err) => console.log('SW failed:', err));
+      });
+    }
   </script>
-
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
