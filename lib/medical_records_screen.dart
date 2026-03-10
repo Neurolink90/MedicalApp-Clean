@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:firebase_messaging/firebase_messaging.dart';
+// CRITICAL: This allows us to talk to the JavaScript variables in index.html
+import 'dart:js' as js; 
 
 // Screen Imports
 import 'calendar_screen.dart';
@@ -36,28 +38,27 @@ class _MedicalRecordsScreenState extends State<MedicalRecordsScreen> {
     _setupNotifications();
   }
 
-  // --- NOTIFICATION SETUP LOGIC ---
-Future<void> _setupNotifications() async {
-  try {
-    FirebaseMessaging messaging = FirebaseMessaging.instance;
+  // --- JS-FIRST NOTIFICATION LOGIC ---
+  Future<void> _setupNotifications() async {
+    if (!kIsWeb) return; // Only run this on Web
 
-    // 1. Request Permission
-    NotificationSettings settings = await messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    try {
+      // 1. We still request permission via Flutter to be safe
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      // 2. Simply get the token. The index.html fix handles the 404.
-      String? token = await messaging.getToken(
-        vapidKey: "Y-8MX6fQIc9vD6JLqXswr4N2bui4dks9fDNNo27c0gA"
-      );
+      // 2. WAIT for the JavaScript in index.html to finish fetching the token
+      debugPrint("Waiting for JS to capture FCM token...");
+      await Future.delayed(const Duration(seconds: 5));
 
-      if (token != null) {
-        debugPrint("FCM Token Captured: $token");
+      // 3. GRAB the token from window.capturedToken (the variable we set in index.html)
+      String? token = js.context['capturedToken'];
+
+      if (token != null && token.isNotEmpty) {
+        debugPrint("✅ Flutter successfully grabbed Token from JS: $token");
         
-        await http.post(
+        // 4. Send the real token to your Render backend
+        final response = await http.post(
           Uri.parse("$backendUrl/update-fcm-token"),
           headers: {"Content-Type": "application/json"},
           body: jsonEncode({
@@ -65,13 +66,17 @@ Future<void> _setupNotifications() async {
             "token": token,
           }),
         );
+
+        if (response.statusCode == 200) {
+          debugPrint("🚀 Token successfully synced to Render DB.");
+        }
+      } else {
+        debugPrint("❌ No token found in JS yet. Ensure notifications are allowed in Brave.");
       }
+    } catch (e) {
+      debugPrint("⚠️ Notification setup failed: $e");
     }
-  } catch (e) {
-    debugPrint("Notification setup failed: $e");
   }
-}
-  // -------------------------------------
 
   Future<void> _fetchPatients() async {
     try {
