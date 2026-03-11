@@ -4,6 +4,16 @@
   <base href="/MedicalApp-Clean/">
 
   <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="medical_app">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
   <title>medical_app</title>
   <link rel="manifest" href="manifest.json">
 
@@ -35,7 +45,7 @@
           // 3. Request Token via JS (Bypassing Flutter's 404 bug)
           return getToken(messaging, {
             serviceWorkerRegistration: registration,
-            vapidKey: "Y-8MX6fQIc9vD6JLqXswr4N2bui4dks9fDNNo27c0gA"
+            vapidKey: "BKSqwX3_MZ4NgdD8BPmC1hXRDHj6qdLhIeqL6Epf-D6-2w3lBG1DKSYzbvPhNppDn89Hr_5DXRpXHVP12fpaC9Y"
           });
         })
         .then((token) => {
