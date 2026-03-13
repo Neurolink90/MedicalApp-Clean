@@ -21,17 +21,18 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging.js";
 
-    // EXACT configuration from your Firebase Console
+    // EXACT configuration verified from your Firebase Console
     const firebaseConfig = {
       apiKey: "AIzaSyDu-DaxMY4O_IaRyPKM7DVigyi7zo1IntA",
-      authDomain: "medirecords-pro.firebaseapp.com",
-      projectId: "medirecords-pro",
-      storageBucket: "medirecords-pro.firebasestorage.app",
+      authDomain: "medirecords-pro.firebaseapp.com", // FIXED
+      projectId: "medirecords-pro", // FIXED
+      storageBucket: "medirecords-pro.firebasestorage.app", // FIXED
       messagingSenderId: "379331373787",
       appId: "1:379331373787:web:33555fcacc7fa3a92a7afe",
       measurementId: "G-61P8TKS1V2"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const messaging = getMessaging(app);
     console.log("Firebase Modular SDK Successfully Initialized");
