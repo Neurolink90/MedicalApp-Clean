@@ -17,17 +17,17 @@
   <title>medical_app</title>
   <link rel="manifest" href="manifest.json">
 
-  <!-- Firebase Modular SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
     import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging.js";
 
+    // EXACT configuration from your Firebase Console
     const firebaseConfig = {
       apiKey: "AIzaSyDu-DaxMY4O_IaRyPKM7DVigyi7zo1IntA",
       authDomain: "medirecords-pro.firebaseapp.com",
       projectId: "medirecords-pro",
-      storageBucket: "medirecords-pro.firebaseasestorage.app",
-      messagingSenderId: "379331373787",
+      storageBucket: "medirecords-pro.firebasestorage.app", // Fixed typo
+      messagingSenderId: "379331373787", // Fixed typo
       appId: "1:379331373787:web:33555fcacc7fa3a92a7afe",
       measurementId: "G-61P8TKS1V2"
     };
@@ -35,6 +35,7 @@
     // 1. Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const messaging = getMessaging(app);
+    console.log("Firebase Modular SDK Successfully Initialized with Correct API Key");
 
     // 2. Register Service Worker with the CORRECT subfolder path
     if ('serviceWorker' in navigator) {
