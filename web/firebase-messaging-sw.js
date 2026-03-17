@@ -2,10 +2,10 @@ importScripts("https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"
 importScripts("https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js");
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDu-DaxmY4O_IaRyPKM7DVigyi7zo1INtA", // UPDATED: Uppercase 'N'
+  apiKey: "AIzaSyCrJBZBBvH_C6zVQxQ7WZl7NhooYgb0870",
   authDomain: "medirecords-pro.firebaseapp.com",
   projectId: "medirecords-pro",
-  storageBucket: "medirecords-pro.firebasestorage.app", // FIXED: Removed 'ase'
+  storageBucket: "medirecords-pro.firebasestorage.app",
   messagingSenderId: "379331373787",
   appId: "1:379331373787:web:33555fcacc7fa3a92a7afe",
   measurementId: "G-61P8TKS1V2"
@@ -21,6 +21,6 @@ messaging.onBackgroundMessage((payload) => {
     body: payload.notification.body,
     icon: '/favicon.png'
   };
-
   self.registration.showNotification(notificationTitle, notificationOptions);
+});
 });
