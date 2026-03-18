@@ -4,6 +4,8 @@ import sqlite3
 import os
 import io
 import logging
+import base64
+import json
 import firebase_admin
 from firebase_admin import credentials, messaging
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -17,14 +19,37 @@ CORS(app, resources={r"/*": {"origins": ["https://neurolink90.github.io", "http:
 logging.basicConfig(level=logging.INFO)
 DB_NAME = "medical_app.db"
 
-# --- FIREBASE INITIALIZATION ---
+# --- FIREBASE INITIALIZATION (SECURE RENDER SETUP) ---
 try:
     if not firebase_admin._apps:
-        cred = credentials.Certificate("serviceAccountKey.json")
-        firebase_admin.initialize_app(cred)
-    logging.info("Firebase Admin SDK initialized successfully.")
+        # Get the Base64 string from your Render Environment Variable
+        firebase_b64 = os.getenv("FIREBASE_CONFIG_JSON")
+        
+        if firebase_b64:
+            logging.info("Reading FIREBASE_CONFIG_JSON from environment...")
+            
+            # Decode the Base64 string back into original JSON bytes
+            decoded_bytes = base64.b64decode(firebase_b64.strip())
+            
+            # Parse the JSON bytes into a Python dictionary
+            firebase_info = json.loads(decoded_bytes.decode('utf-8'))
+            
+            # Initialize the app using the credentials dictionary
+            cred = credentials.Certificate(firebase_info)
+            firebase_admin.initialize_app(cred)
+            logging.info("✅ Firebase Admin SDK initialized successfully from Base64!")
+        else:
+            logging.warning("⚠️ FIREBASE_CONFIG_JSON variable not found in environment. Using local fallback...")
+            # Fallback for local development if the env var isn't set, but file exists
+            if os.path.exists("serviceAccountKey.json"):
+                cred = credentials.Certificate("serviceAccountKey.json")
+                firebase_admin.initialize_app(cred)
+                logging.info("✅ Firebase initialized from local serviceAccountKey.json.")
+            else:
+                 logging.warning("❌ No Firebase credentials found. Push notifications disabled.")
+
 except Exception as e:
-    logging.warning(f"Firebase Admin could not be initialized. Push notifications disabled: {e}")
+    logging.error(f"❌ Critical Error initializing Firebase: {e}")
 
 def get_db():
     conn = sqlite3.connect(DB_NAME)
