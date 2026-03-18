@@ -1,6 +1,7 @@
-Flask==3.1.2
-flask-cors==6.0.1
-cryptography==46.0.3
-gunicorn==23.0.0
-reportlab
-firebase-admin==6.4.0
+fastapi
+uvicorn
+python-multipart
+firebase-admin
+cryptography
+passlib[bcrypt]
+requests
