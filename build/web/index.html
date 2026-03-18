@@ -2,41 +2,58 @@
 <html>
 <head>
   <base href="/MedicalApp-Clean/">
-
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
-
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="medical_app">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
-
-  <link rel="icon" type="image/png" href="favicon.png"/>
-
-  <title>medical_app</title>
+  <title>MediRecords Pro</title>
   <link rel="manifest" href="manifest.json">
-</head>
-<body>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
 
-  <script>
-    // Your specific Firebase Configuration
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+    import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging.js";
+
     const firebaseConfig = {
-      apiKey: "AIzaSyDu-DaxMY4O_IaRyPKM7DVigyi7zo1IntA",
+      apiKey: "AIzaSyCrJBZBBvH_C6zVQxQ7WZl7NhooYgb0870",
       authDomain: "medirecords-pro.firebaseapp.com",
       projectId: "medirecords-pro",
-      storageBucket: "medirecords-pro.firebaseasestorage.app",
+      storageBucket: "medirecords-pro.firebasestorage.app",
       messagingSenderId: "379331373787",
       appId: "1:379331373787:web:33555fcacc7fa3a92a7afe",
       measurementId: "G-61P8TKS1V2"
     };
 
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-  </script>
+    const app = initializeApp(firebaseConfig);
+    const messaging = getMessaging(app);
 
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./firebase-messaging-sw.js')
+        .then((registration) => {
+          console.log('SW Registered. Waiting for activation...');
+          
+          const sw = registration.installing || registration.waiting || registration.active;
+          
+          const requestToken = () => {
+            getToken(messaging, {
+              serviceWorkerRegistration: registration,
+              vapidKey: "BKSqwX3_MZ4NgdD8BPmC1hXRDHj6qdLhIeqL6Epf-D6-2w3lBG1DKSYzbvPhNppDn89Hr_5DXRpXHVP12fpaC9Y"
+            }).then((token) => {
+              if (token) {
+                console.log('JS Captured Token:', token);
+                window.capturedToken = token;
+              }
+            }).catch((err) => console.log('FCM Error in JS:', err));
+          };
+
+          if (registration.active && registration.active.state === 'activated') {
+            requestToken();
+          } else if (sw) {
+            sw.addEventListener('statechange', (e) => {
+              if (e.target.state === 'activated') requestToken();
+            });
+          }
+        });
+    }
+  </script>
+</head>
+<body>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
