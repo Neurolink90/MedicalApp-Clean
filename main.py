@@ -7,9 +7,8 @@ import sqlite3
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import FastAPI, Form, HTTPException, File, UploadFile, Depends
+from fastapi import FastAPI, Form, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -25,13 +24,11 @@ DB_NAME = "medical_app.db"
 
 # --- BCRYPT PASSWORD HELPERS ---
 def hash_password(password: str) -> str:
-    # Hash a password for the first time
     salt = bcrypt.gensalt()
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
 
 def verify_password(password: str, hashed: str) -> bool:
-    # Check a password against an existing hash
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 # --- ENCRYPTION SETUP ---
@@ -150,12 +147,28 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
 
     return {"success": True}
 
+# --- DEBUG ROUTES ---
+
 @app.get("/debug/db-check")
 async def db_check():
     conn = get_db()
     user = conn.execute('SELECT email, fcm_token FROM patients WHERE email = ?', ("zach@example.com",)).fetchone()
     conn.close()
     return {"zach_record": dict(user) if user else "Not Found"}
+
+@app.get("/debug/reset-zach")
+async def reset_zach():
+    """Forces an update to Zach's password using the new bcrypt format to fix login failures."""
+    try:
+        conn = get_db()
+        new_hashed_pw = hash_password("helloandgoodbye0")
+        conn.execute('UPDATE patients SET password = ? WHERE email = ?', 
+                     (new_hashed_pw, "zach@example.com"))
+        conn.commit()
+        conn.close()
+        return {"status": "success", "message": "Zach's password has been updated with the new bcrypt hash."}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
