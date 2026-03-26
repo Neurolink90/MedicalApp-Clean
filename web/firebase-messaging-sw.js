@@ -18,8 +18,7 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/favicon.png'
+    icon: './favicon.png'
   };
   self.registration.showNotification(notificationTitle, notificationOptions);
-});
 });

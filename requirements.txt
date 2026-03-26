@@ -3,5 +3,5 @@ uvicorn
 python-multipart
 firebase-admin
 cryptography
-passlib[bcrypt]
+bcrypt
 requests

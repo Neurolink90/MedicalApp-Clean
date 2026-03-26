@@ -14,15 +14,25 @@ from pydantic import BaseModel
 import firebase_admin
 from firebase_admin import credentials, messaging
 from cryptography.fernet import Fernet
-from passlib.context import CryptContext
+import bcrypt
 
 # --- INITIALIZATION ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="MediRecords Pro Unified Backend")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 DB_NAME = "medical_app.db"
+
+# --- BCRYPT PASSWORD HELPERS ---
+def hash_password(password: str) -> str:
+    # Hash a password for the first time
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    # Check a password against an existing hash
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 # --- ENCRYPTION SETUP ---
 # Grabs your permanent mL-N5N... key from your Render Env Var
@@ -73,7 +83,7 @@ def init_db():
     # Seed Zach's Record with Encrypted SSN
     cursor.execute('SELECT * FROM patients WHERE email = ?', ("zach@example.com",))
     if not cursor.fetchone():
-        hashed_pw = pwd_context.hash("helloandgoodbye0")
+        hashed_pw = hash_password("helloandgoodbye0")
         encrypted_ssn = cipher.encrypt("000-00-0000".encode()).decode()
         cursor.execute('''INSERT INTO patients (name, email, password, dob, ssn, address, phone) 
                           VALUES (?, ?, ?, ?, ?, ?, ?)''',
@@ -90,7 +100,7 @@ async def login(email: str = Form(...), password: str = Form(...)):
     conn = get_db()
     user = conn.execute('SELECT * FROM patients WHERE email = ?', (email,)).fetchone()
     conn.close()
-    if user and pwd_context.verify(password, user['password']):
+    if user and verify_password(password, user['password']):
         return {"success": True, "email": user['email']}
     raise HTTPException(status_code=401, detail="Invalid Credentials")
 
