@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb;
+
+// Import your other screens and the new FCM service
 import 'medical_records_screen.dart';
 import 'add_patient_screen.dart';
+import 'core/network/fcm_token_service.dart'; // Adjust path if needed
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,23 +20,50 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _obscureText = true; // For the "Eye" icon
 
-  final String backendUrl = kIsWeb ? "https://medicalapp-clean.onrender.com" : "http://10.0.2.2:5000";
+  // Automatically switches between Render (Live) and Localhost
+  final String backendUrl = kIsWeb 
+      ? "https://medicalapp-clean.onrender.com" 
+      : "http://10.0.2.2:5000";
 
   Future<void> _login() async {
     setState(() => _isLoading = true);
     try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text.trim();
+
       final response = await http.post(
         Uri.parse("$backendUrl/login"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"email": _emailController.text.trim(), "password": _passwordController.text.trim()}),
+        // Send as standard Form Data to match FastAPI's Form(...) requirement
+        body: {
+          "email": email, 
+          "password": password
+        },
       );
+      
       if (response.statusCode == 200) {
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MedicalRecordsScreen()));
+        // 🚀 THE TRIGGER: Start polling for the FCM Token and bind it to this email
+        FCMTokenService().listenAndRegisterToken(email);
+
+        // Navigate to the dashboard
+        if (mounted) {
+          Navigator.pushReplacement(
+            context, 
+            MaterialPageRoute(builder: (_) => const MedicalRecordsScreen())
+          );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Invalid Credentials"), backgroundColor: Colors.red));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Invalid Credentials"), backgroundColor: Colors.red)
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Connection Error"), backgroundColor: Colors.red));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Connection Error"), backgroundColor: Colors.red)
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -50,9 +79,19 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               Icon(Icons.local_hospital, size: 80, color: Colors.blue[700]),
               const SizedBox(height: 16),
-              const Text("MediRecords Pro", style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+              const Text(
+                "MediRecords Pro", 
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)
+              ),
               const SizedBox(height: 40),
-              TextField(controller: _emailController, decoration: const InputDecoration(labelText: "Email", border: OutlineInputBorder(), prefixIcon: Icon(Icons.email))),
+              TextField(
+                controller: _emailController, 
+                decoration: const InputDecoration(
+                  labelText: "Email", 
+                  border: OutlineInputBorder(), 
+                  prefixIcon: Icon(Icons.email)
+                )
+              ),
               const SizedBox(height: 20),
               TextField(
                 controller: _passwordController, 
@@ -74,7 +113,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _login,
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[700]),
-                  child: const Text("LOGIN", style: TextStyle(color: Colors.white)),
+                  child: _isLoading 
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("LOGIN", style: TextStyle(color: Colors.white)),
                 ),
               ),
               const SizedBox(height: 16),
@@ -82,7 +123,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: double.infinity,
                 height: 50,
                 child: OutlinedButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AddPatientScreen())),
+                  onPressed: () => Navigator.push(
+                    context, 
+                    MaterialPageRoute(builder: (_) => const AddPatientScreen())
+                  ),
                   child: const Text("CREATE NEW ACCOUNT"),
                 ),
               ),
