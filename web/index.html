@@ -4,8 +4,7 @@
   <base href="$FLUTTER_BASE_HREF">
   <meta charset="UTF-8">
   <title>MediRecords Pro</title>
-  <link rel="manifest" href="manifest.json">
-
+  
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
   
@@ -25,8 +24,6 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' })
         .then((reg) => {
-          console.log('SW Active at scope:', reg.scope);
-          
           return messaging.getToken({
             serviceWorkerRegistration: reg,
             vapidKey: "BKSqwX3_MZ4NgdD8BPmC1hXRDHj6qdLhIeqL6Epf-D6-2w3lBG1DKSYzbvPhNppDn89Hr_5DXRpXHVP12fpaC9Y"
