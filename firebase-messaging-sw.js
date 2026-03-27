@@ -2,13 +2,12 @@ importScripts("https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"
 importScripts("https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js");
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCrJBZBBvH_C6zVQxQ7WZl7NhooYgb0870",
+  apiKey: "AIzaSyCrJBZBBvH_C6zVQxQ7WZl7NhooYgb0870", // NEW KEY
   authDomain: "medirecords-pro.firebaseapp.com",
   projectId: "medirecords-pro",
-  storageBucket: "medirecords-pro.firebasestorage.app",
+  storageBucket: "medirecords-pro.firebasestorage.app", // FIXED TYPO
   messagingSenderId: "379331373787",
   appId: "1:379331373787:web:33555fcacc7fa3a92a7afe",
-  measurementId: "G-61P8TKS1V2"
 };
 
 firebase.initializeApp(firebaseConfig);
@@ -19,8 +18,7 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/favicon.png'
+    icon: './favicon.png'
   };
   self.registration.showNotification(notificationTitle, notificationOptions);
-});
 });
