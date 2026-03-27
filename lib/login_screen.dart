@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 // Import your other screens and the new FCM service
 import 'medical_records_screen.dart';
 import 'add_patient_screen.dart';
-import 'core/network/fcm_token_service.dart'; // Adjust path if needed
+import 'fcm_token_service.dart';; // Adjust path if needed
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
