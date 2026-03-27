@@ -9,7 +9,6 @@ from typing import List, Optional
 
 from fastapi import FastAPI, Form, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 import firebase_admin
 from firebase_admin import credentials, messaging
 from cryptography.fernet import Fernet
@@ -32,7 +31,6 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 # --- ENCRYPTION SETUP ---
-# Grabs your permanent mL-N5N... key from your Render Env Var
 FERNET_KEY = os.environ.get('FERNET_KEY', 'mL-N5Npl_dijvORR5c4im7nWs5HydjW_qXCbVFKFGKk=')
 cipher = Fernet(FERNET_KEY.encode())
 
@@ -67,7 +65,6 @@ def get_db():
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
-    # Unified Table Structure
     cursor.execute('''CREATE TABLE IF NOT EXISTS patients (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         name TEXT, dob TEXT, ssn TEXT, address TEXT, 
@@ -77,7 +74,7 @@ def init_db():
     cursor.execute('CREATE TABLE IF NOT EXISTS vitals (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_email TEXT, type TEXT, value TEXT, unit TEXT, timestamp TEXT)')
     cursor.execute('CREATE TABLE IF NOT EXISTS documents (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_email TEXT, filename TEXT, file_type TEXT, upload_date TEXT, file_data BLOB)')
     
-    # Seed Zach's Record with Encrypted SSN
+    # Seed Zach's Record
     cursor.execute('SELECT * FROM patients WHERE email = ?', ("zach@example.com",))
     if not cursor.fetchone():
         hashed_pw = hash_password("helloandgoodbye0")
@@ -92,6 +89,23 @@ init_db()
 
 # --- ENDPOINTS ---
 
+@app.post("/register")
+async def register(name: str = Form(...), email: str = Form(...), password: str = Form(...), dob: str = Form(None)):
+    """Restored endpoint to allow new account creation."""
+    conn = get_db()
+    try:
+        hashed_pw = hash_password(password)
+        # Default dob if none provided
+        safe_dob = dob if dob else "1980-01-01"
+        conn.execute('INSERT INTO patients (name, email, password, dob) VALUES (?, ?, ?, ?)', 
+                     (name, email, hashed_pw, safe_dob))
+        conn.commit()
+        return {"success": True}
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="User already exists")
+    finally:
+        conn.close()
+
 @app.post("/login")
 async def login(email: str = Form(...), password: str = Form(...)):
     conn = get_db()
@@ -103,7 +117,6 @@ async def login(email: str = Form(...), password: str = Form(...)):
 
 @app.post("/register-token")
 async def register_token(user_id: str = Form(...), fcm_token: str = Form(...)):
-    """Receives the token from the Flutter JS-Capture service."""
     try:
         conn = get_db()
         conn.execute('UPDATE patients SET fcm_token = ? WHERE email = ?', (fcm_token, user_id))
@@ -131,7 +144,6 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
                  (email, file.filename, file.content_type, datetime.now().strftime('%Y-%m-%d'), file_data))
     conn.commit()
     
-    # Send Push Notification if token exists
     user = conn.execute('SELECT fcm_token FROM patients WHERE email = ?', (email,)).fetchone()
     conn.close()
     

@@ -1,54 +1,48 @@
-import 'dart:async';
-import 'dart:js' as js;
-import 'package:http/http.dart' as http;
-import 'package:flutter/foundation.dart';
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <title>MediRecords Pro</title>
+  <link rel="manifest" href="manifest.json">
 
-class FCMTokenService {
-  // Your Render backend URL
-  final String backendUrl = "https://medicalapp-clean.onrender.com";
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js"></script>
+  
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyCrJBZBBvH_C6zVQxQ7WZl7NhooYgb0870",
+      authDomain: "medirecords-pro.firebaseapp.com",
+      projectId: "medirecords-pro",
+      storageBucket: "medirecords-pro.firebasestorage.app",
+      messagingSenderId: "379331373787",
+      appId: "1:379331373787:web:33555fcacc7fa3a92a7afe"
+    };
 
-  /// Starts a periodic timer to check for the token captured by JS.
-  /// Once found, it sends it to the backend and cancels the timer.
-  Future<void> listenAndRegisterToken(String userId) async {
-    if (!kIsWeb) {
-      debugPrint("FCMTokenService: Not running on Web. Skipping JS capture.");
-      return;
+    firebase.initializeApp(firebaseConfig);
+    const messaging = firebase.messaging();
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' })
+        .then((reg) => {
+          console.log('SW Active at scope:', reg.scope);
+          
+          return messaging.getToken({
+            serviceWorkerRegistration: reg,
+            vapidKey: "BKSqwX3_MZ4NgdD8BPmC1hXRDHj6qdLhIeqL6Epf-D6-2w3lBG1DKSYzbvPhNppDn89Hr_5DXRpXHVP12fpaC9Y"
+          });
+        })
+        .then((token) => {
+          if (token) {
+            console.log('JS Captured Token:', token);
+            window.capturedToken = token; 
+          }
+        })
+        .catch((err) => console.log('FCM Error:', err));
     }
-
-    debugPrint("FCMTokenService: Polling JS for captured FCM token...");
-    
-    Timer.periodic(const Duration(seconds: 2), (timer) async {
-      // Access the global window variable set in index.html
-      final String? token = js.context['capturedToken'];
-      
-      if (token != null && token.isNotEmpty) {
-        debugPrint("✅ Flutter successfully grabbed token from JS: $token");
-        await _sendTokenToBackend(userId, token);
-        
-        // Stop polling once we have successfully captured and sent the token
-        timer.cancel(); 
-      }
-    });
-  }
-
-  /// Sends the captured token to the FastAPI Render backend
-  Future<void> _sendTokenToBackend(String userId, String token) async {
-    try {
-      final response = await http.post(
-        Uri.parse("$backendUrl/register-token"),
-        body: {
-          'user_id': userId, 
-          'fcm_token': token
-        },
-      );
-
-      if (response.statusCode == 200) {
-        debugPrint("🚀 Token synced to Render database successfully!");
-      } else {
-        debugPrint("⚠️ Backend rejected token sync. Status: ${response.statusCode}");
-      }
-    } catch (e) {
-      debugPrint("❌ Failed to sync token to Render: $e");
-    }
-  }
-}
+  </script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
