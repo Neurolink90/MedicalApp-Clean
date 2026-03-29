@@ -22,20 +22,33 @@
     const messaging = firebase.messaging();
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: './' })
+      // Register with the exact subfolder scope to match GitHub Pages
+      navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: '/MedicalApp-Clean/' })
         .then((reg) => {
-          return messaging.getToken({
-            serviceWorkerRegistration: reg,
-            vapidKey: "BKSqwX3_MZ4NgdD8BPmC1hXRDHj6qdLhIeqL6Epf-D6-2w3lBG1DKSYzbvPhNppDn89Hr_5DXRpXHVP12fpaC9Y"
-          });
+          console.log('SW Registered. Waiting for activation...');
+
+          // Wait for the Service Worker to wake up before asking for a token
+          const checkActive = () => {
+            if (reg.active && reg.active.state === 'activated') {
+              console.log('SW is Active! Requesting token...');
+              messaging.getToken({
+                serviceWorkerRegistration: reg,
+                vapidKey: "BKSqwX3_MZ4NgdD8BPmC1hXRDHj6qdLhIeqL6Epf-D6-2w3lBG1DKSYzbvPhNppDn89Hr_5DXRpXHVP12fpaC9Y"
+              }).then((token) => {
+                if (token) {
+                  console.log('JS Captured Token:', token);
+                  window.capturedToken = token; 
+                }
+              }).catch((err) => console.log('FCM Token Request Error:', err));
+            } else {
+              // Check again in 500ms
+              setTimeout(checkActive, 500);
+            }
+          };
+          
+          checkActive();
         })
-        .then((token) => {
-          if (token) {
-            console.log('JS Captured Token:', token);
-            window.capturedToken = token; 
-          }
-        })
-        .catch((err) => console.log('FCM Error:', err));
+        .catch((err) => console.log('FCM Registration Error:', err));
     }
   </script>
 </head>
