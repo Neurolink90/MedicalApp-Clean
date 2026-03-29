@@ -43,7 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- FIREBASE ADMIN SDK (BASE64 DECODE) ---
+# --- FIREBASE ADMIN SDK ---
 try:
     if not firebase_admin._apps:
         firebase_b64 = os.getenv("FIREBASE_CONFIG_JSON")
@@ -87,15 +87,13 @@ def init_db():
 
 init_db()
 
-# --- ENDPOINTS ---
+# --- AUTH ENDPOINTS ---
 
 @app.post("/register")
 async def register(name: str = Form(...), email: str = Form(...), password: str = Form(...), dob: str = Form(None)):
-    """Restored endpoint to allow new account creation."""
     conn = get_db()
     try:
         hashed_pw = hash_password(password)
-        # Default dob if none provided
         safe_dob = dob if dob else "1980-01-01"
         conn.execute('INSERT INTO patients (name, email, password, dob) VALUES (?, ?, ?, ?)', 
                      (name, email, hashed_pw, safe_dob))
@@ -115,6 +113,33 @@ async def login(email: str = Form(...), password: str = Form(...)):
         return {"success": True, "email": user['email']}
     raise HTTPException(status_code=401, detail="Invalid Credentials")
 
+# --- DATA ENDPOINTS (RESTORED TO FIX 404s) ---
+
+@app.get("/patients")
+async def get_patients():
+    conn = get_db()
+    users = conn.execute('SELECT name, dob, email FROM patients').fetchall()
+    conn.close()
+    return [{"name": u['name'], "dob": u['dob'], "email": u['email'], "status": "Stable", "mrn": "MRN-0000"} for u in users]
+
+@app.get("/profile")
+async def get_profile(email: str):
+    conn = get_db()
+    user = conn.execute('SELECT name, email, dob, address, phone FROM patients WHERE email = ?', (email,)).fetchone()
+    conn.close()
+    if user:
+        return dict(user)
+    raise HTTPException(status_code=404, detail="Profile not found")
+
+@app.get("/provider/dashboard")
+async def provider_dashboard():
+    conn = get_db()
+    summary = conn.execute('SELECT name, dob, email FROM patients').fetchall()
+    conn.close()
+    return [dict(row) for row in summary]
+
+# --- FCM & PUSH NOTIFICATIONS ---
+
 @app.post("/register-token")
 async def register_token(user_id: str = Form(...), fcm_token: str = Form(...)):
     try:
@@ -126,15 +151,6 @@ async def register_token(user_id: str = Form(...), fcm_token: str = Form(...)):
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/vitals")
-async def add_vitals(email: str = Form(...), type: str = Form(...), value: str = Form(...), unit: str = Form(...)):
-    conn = get_db()
-    conn.execute('INSERT INTO vitals (patient_email, type, value, unit, timestamp) VALUES (?, ?, ?, ?, ?)',
-                 (email, type, value, unit, datetime.now().strftime('%Y-%m-%d %H:%M')))
-    conn.commit()
-    conn.close()
-    return {"success": True}
 
 @app.post("/documents/upload")
 async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
@@ -159,6 +175,15 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
 
     return {"success": True}
 
+@app.post("/vitals")
+async def add_vitals(email: str = Form(...), type: str = Form(...), value: str = Form(...), unit: str = Form(...)):
+    conn = get_db()
+    conn.execute('INSERT INTO vitals (patient_email, type, value, unit, timestamp) VALUES (?, ?, ?, ?, ?)',
+                 (email, type, value, unit, datetime.now().strftime('%Y-%m-%d %H:%M')))
+    conn.commit()
+    conn.close()
+    return {"success": True}
+
 # --- DEBUG ROUTES ---
 
 @app.get("/debug/db-check")
@@ -170,7 +195,6 @@ async def db_check():
 
 @app.get("/debug/reset-zach")
 async def reset_zach():
-    """Forces an update to Zach's password using the new bcrypt format to fix login failures."""
     try:
         conn = get_db()
         new_hashed_pw = hash_password("helloandgoodbye0")
