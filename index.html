@@ -21,6 +21,17 @@
     firebase.initializeApp(firebaseConfig);
     const messaging = firebase.messaging();
 
+    // 🚀 NEW BLOCK: Handles notifications while the app is OPEN and FOCUSED
+    messaging.onMessage((payload) => {
+      console.log('Foreground message received:', payload);
+      
+      // Manually trigger a notification popup
+      new Notification(payload.notification.title, {
+        body: payload.notification.body,
+        icon: './favicon.png'
+      });
+    });
+
     if ('serviceWorker' in navigator) {
       // Register with the exact subfolder scope to match GitHub Pages
       navigator.serviceWorker.register('./firebase-messaging-sw.js', { scope: '/MedicalApp-Clean/' })
