@@ -2,10 +2,10 @@ importScripts("https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"
 importScripts("https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js");
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCrJBZBBvH_C6zVQxQ7WZl7NhooYgb0870", // NEW KEY
+  apiKey: "AIzaSyCrJBZBBvH_C6zVQxQ7WZl7NhooYgb0870", 
   authDomain: "medirecords-pro.firebaseapp.com",
   projectId: "medirecords-pro",
-  storageBucket: "medirecords-pro.firebasestorage.app", // FIXED TYPO
+  storageBucket: "medirecords-pro.firebasestorage.app", 
   messagingSenderId: "379331373787",
   appId: "1:379331373787:web:33555fcacc7fa3a92a7afe",
 };

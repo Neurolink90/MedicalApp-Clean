@@ -113,7 +113,7 @@ async def login(email: str = Form(...), password: str = Form(...)):
         return {"success": True, "email": user['email']}
     raise HTTPException(status_code=401, detail="Invalid Credentials")
 
-# --- DATA ENDPOINTS (RESTORED TO FIX 404s) ---
+# --- DATA ENDPOINTS ---
 
 @app.get("/patients")
 async def get_patients():
