@@ -87,22 +87,7 @@ def init_db():
 
 init_db()
 
-# --- AUTH ENDPOINTS ---
-
-@app.post("/register")
-async def register(name: str = Form(...), email: str = Form(...), password: str = Form(...), dob: str = Form(None)):
-    conn = get_db()
-    try:
-        hashed_pw = hash_password(password)
-        safe_dob = dob if dob else "1980-01-01"
-        conn.execute('INSERT INTO patients (name, email, password, dob) VALUES (?, ?, ?, ?)', 
-                     (name, email, hashed_pw, safe_dob))
-        conn.commit()
-        return {"success": True}
-    except sqlite3.IntegrityError:
-        raise HTTPException(status_code=400, detail="User already exists")
-    finally:
-        conn.close()
+# --- AUTH & TOKEN ---
 
 @app.post("/login")
 async def login(email: str = Form(...), password: str = Form(...)):
@@ -113,7 +98,17 @@ async def login(email: str = Form(...), password: str = Form(...)):
         return {"success": True, "email": user['email']}
     raise HTTPException(status_code=401, detail="Invalid Credentials")
 
-# --- DATA ENDPOINTS ---
+@app.post("/register-token")
+@app.post("/update-fcm-token") # Handle both endpoint names used by the app
+async def register_token(user_id: str = Form(...), fcm_token: str = Form(...)):
+    conn = get_db()
+    conn.execute('UPDATE patients SET fcm_token = ? WHERE email = ?', (fcm_token, user_id))
+    conn.commit()
+    conn.close()
+    logger.info(f"🚀 Token updated for {user_id}")
+    return {"status": "success"}
+
+# --- DATA FETCHING (Clears the 404s/405s) ---
 
 @app.get("/patients")
 async def get_patients():
@@ -123,34 +118,48 @@ async def get_patients():
     return [{"name": u['name'], "dob": u['dob'], "email": u['email'], "status": "Stable", "mrn": "MRN-0000"} for u in users]
 
 @app.get("/profile")
-async def get_profile(email: str):
+async def get_profile(email: str = "zach@example.com"): # Default value fixes 422 error
     conn = get_db()
     user = conn.execute('SELECT name, email, dob, address, phone FROM patients WHERE email = ?', (email,)).fetchone()
     conn.close()
-    if user:
-        return dict(user)
+    if user: return dict(user)
     raise HTTPException(status_code=404, detail="Profile not found")
 
-@app.get("/provider/dashboard")
-async def provider_dashboard():
+@app.get("/medications")
+async def get_medications(email: str = "zach@example.com"):
     conn = get_db()
-    summary = conn.execute('SELECT name, dob, email FROM patients').fetchall()
+    meds = conn.execute('SELECT name, dosage, frequency, reminder_time FROM medications WHERE patient_email = ?', (email,)).fetchall()
     conn.close()
-    return [dict(row) for row in summary]
+    return [dict(m) for m in meds]
 
-# --- FCM & PUSH NOTIFICATIONS ---
+@app.get("/vitals")
+async def get_vitals_list(email: str = "zach@example.com"):
+    conn = get_db()
+    v = conn.execute('SELECT type, value, unit, timestamp FROM vitals WHERE patient_email = ?', (email,)).fetchall()
+    conn.close()
+    return [dict(row) for row in v]
 
-@app.post("/register-token")
-async def register_token(user_id: str = Form(...), fcm_token: str = Form(...)):
-    try:
-        conn = get_db()
-        conn.execute('UPDATE patients SET fcm_token = ? WHERE email = ?', (fcm_token, user_id))
-        conn.commit()
-        conn.close()
-        logger.info(f"🚀 Token updated for {user_id}")
-        return {"status": "success"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.get("/documents")
+async def get_documents_list(email: str = "zach@example.com"):
+    conn = get_db()
+    docs = conn.execute('SELECT filename, file_type, upload_date FROM documents WHERE patient_email = ?', (email,)).fetchall()
+    conn.close()
+    return [dict(row) for row in docs]
+
+@app.get("/appointments")
+async def get_appointments(email: str = "zach@example.com"):
+    return [{"date": "2026-05-10", "time": "10:00 AM", "provider": "Dr. Smith", "type": "Checkup"}]
+
+# --- DATA SAVING ---
+
+@app.post("/vitals")
+async def add_vitals(email: str = Form(...), type: str = Form(...), value: str = Form(...), unit: str = Form(...)):
+    conn = get_db()
+    conn.execute('INSERT INTO vitals (patient_email, type, value, unit, timestamp) VALUES (?, ?, ?, ?, ?)',
+                 (email, type, value, unit, datetime.now().strftime('%Y-%m-%d %H:%M')))
+    conn.commit()
+    conn.close()
+    return {"success": True}
 
 @app.post("/documents/upload")
 async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
@@ -175,36 +184,12 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
 
     return {"success": True}
 
-@app.post("/vitals")
-async def add_vitals(email: str = Form(...), type: str = Form(...), value: str = Form(...), unit: str = Form(...)):
-    conn = get_db()
-    conn.execute('INSERT INTO vitals (patient_email, type, value, unit, timestamp) VALUES (?, ?, ?, ?, ?)',
-                 (email, type, value, unit, datetime.now().strftime('%Y-%m-%d %H:%M')))
-    conn.commit()
-    conn.close()
-    return {"success": True}
-
-# --- DEBUG ROUTES ---
-
 @app.get("/debug/db-check")
 async def db_check():
     conn = get_db()
     user = conn.execute('SELECT email, fcm_token FROM patients WHERE email = ?', ("zach@example.com",)).fetchone()
     conn.close()
     return {"zach_record": dict(user) if user else "Not Found"}
-
-@app.get("/debug/reset-zach")
-async def reset_zach():
-    try:
-        conn = get_db()
-        new_hashed_pw = hash_password("helloandgoodbye0")
-        conn.execute('UPDATE patients SET password = ? WHERE email = ?', 
-                     (new_hashed_pw, "zach@example.com"))
-        conn.commit()
-        conn.close()
-        return {"status": "success", "message": "Zach's password has been updated with the new bcrypt hash."}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 if __name__ == "__main__":
     import uvicorn

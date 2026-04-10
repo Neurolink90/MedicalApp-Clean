@@ -1,51 +1,54 @@
 import 'dart:async';
+import 'dart:convert'; // Added for jsonEncode
 import 'dart:js' as js;
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 
 class FCMTokenService {
-  // Your Render backend URL
+  // Use the exact endpoint shown as successful in your Render logs
   final String backendUrl = "https://medicalapp-clean.onrender.com";
 
-  /// Starts a periodic timer to check for the token captured by JS.
-  /// Once found, it sends it to the backend and cancels the timer.
   Future<void> listenAndRegisterToken(String userId) async {
     if (!kIsWeb) {
-      debugPrint("FCMTokenService: Not running on Web. Skipping JS capture.");
+      debugPrint("FCMTokenService: Not running on Web. Skipping.");
       return;
     }
 
     debugPrint("FCMTokenService: Polling JS for captured FCM token...");
     
     Timer.periodic(const Duration(seconds: 2), (timer) async {
-      // Access the global window variable set in index.html
-      final String? token = js.context['capturedToken'];
-      
-      if (token != null && token.isNotEmpty) {
-        debugPrint("✅ Flutter successfully grabbed token from JS: $token");
-        await _sendTokenToBackend(userId, token);
+      try {
+        final String? token = js.context['capturedToken'];
         
-        // Stop polling once we have successfully captured and sent the token
-        timer.cancel(); 
+        if (token != null && token.isNotEmpty) {
+          debugPrint("✅ Flutter successfully grabbed token from JS: $token");
+          await _sendTokenToBackend(userId, token);
+          timer.cancel(); 
+        }
+      } catch (e) {
+        // Prevents the timer from crashing the app if JS interop fails
+        debugPrint("FCMTokenService: JS context not ready yet...");
       }
     });
   }
 
-  /// Sends the captured token to the FastAPI Render backend
   Future<void> _sendTokenToBackend(String userId, String token) async {
     try {
       final response = await http.post(
-        Uri.parse("$backendUrl/register-token"),
-        body: {
+        Uri.parse("$backendUrl/register-token"), // Matches your Render logs
+        headers: {
+          "Content-Type": "application/json", // Tell FastAPI this is JSON
+        },
+        body: jsonEncode({
           'user_id': userId, 
           'fcm_token': token
-        },
+        }),
       );
 
       if (response.statusCode == 200) {
         debugPrint("🚀 Token synced to Render database successfully!");
       } else {
-        debugPrint("⚠️ Backend rejected token sync. Status: ${response.statusCode}");
+        debugPrint("⚠️ Backend rejected token. Status: ${response.statusCode} Body: ${response.body}");
       }
     } catch (e) {
       debugPrint("❌ Failed to sync token to Render: $e");
