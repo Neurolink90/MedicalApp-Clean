@@ -7,7 +7,8 @@ import sqlite3
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import FastAPI, Form, HTTPException, File, UploadFile
+# Added 'Request' to the imports here
+from fastapi import FastAPI, Form, HTTPException, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -98,9 +99,23 @@ async def login(email: str = Form(...), password: str = Form(...)):
         return {"success": True, "email": user['email']}
     raise HTTPException(status_code=401, detail="Invalid Credentials")
 
+# --- UPDATED FLEXIBLE TOKEN ENDPOINT ---
 @app.post("/register-token")
-@app.post("/update-fcm-token") # Handle both endpoint names used by the app
-async def register_token(user_id: str = Form(...), fcm_token: str = Form(...)):
+@app.post("/update-fcm-token")
+async def register_token(request: Request):
+    # This detects if the data is JSON or Form data automatically
+    if request.headers.get('content-type') == 'application/json':
+        data = await request.json()
+        user_id = data.get('user_id')
+        fcm_token = data.get('fcm_token')
+    else:
+        form_data = await request.form()
+        user_id = form_data.get('user_id')
+        fcm_token = form_data.get('fcm_token')
+
+    if not user_id or not fcm_token:
+        raise HTTPException(status_code=400, detail="Missing user_id or fcm_token")
+
     conn = get_db()
     conn.execute('UPDATE patients SET fcm_token = ? WHERE email = ?', (fcm_token, user_id))
     conn.commit()
