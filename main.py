@@ -193,9 +193,17 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
                 notification=messaging.Notification(title="New Record", body=f"Document '{file.filename}' added."),
                 token=user['fcm_token']
             )
-            messaging.send(message)
+            # This line sends the message to Google/Firebase
+            response = messaging.send(message)
+            
+            # THIS IS THE LOG WE ARE LOOKING FOR
+            logger.info(f"✅ FCM SUCCESS: Message sent to Google. ID: {response}")
+            
         except Exception as e:
-            logger.error(f"FCM Notification Failed: {e}")
+            # THIS IS THE LOG IF IT FAILS
+            logger.error(f"❌ FCM FAILURE: Error talking to Firebase: {e}")
+    else:
+        logger.warning(f"⚠️ FCM SKIP: No token found in DB for {email}")
 
     return {"success": True}
 
