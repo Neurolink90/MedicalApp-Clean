@@ -10,12 +10,22 @@ from fastapi import FastAPI, Form, HTTPException, File, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 import firebase_admin
 from firebase_admin import credentials, messaging, firestore, storage
+import bcrypt
 
 # --- INITIALIZATION ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="MediRecords Pro Unified Backend")
+
+# --- BCRYPT PASSWORD HELPERS ---
+def hash_password(password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 # --- FIREBASE ADMIN SDK ---
 try:
@@ -25,8 +35,6 @@ try:
             decoded_bytes = base64.b64decode(firebase_b64.strip())
             firebase_info = json.loads(decoded_bytes.decode('utf-8'))
             cred = credentials.Certificate(firebase_info)
-            
-            # Updated with your verified bucket name
             firebase_admin.initialize_app(cred, {
                 'storageBucket': 'medirecords-pro.firebasestorage.app'
             })
@@ -34,7 +42,6 @@ try:
 except Exception as e:
     logger.error(f"❌ Firebase Init Error: {e}")
 
-# Clients
 db = firestore.client()
 bucket = storage.bucket()
 
@@ -47,7 +54,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- TOKEN REGISTRATION ---
+# --- AUTH & TOKEN ---
+
+@app.post("/login")
+async def login(email: str = Form(...), password: str = Form(...)):
+    # Now looks in Firestore instead of SQLite
+    user_doc = db.collection("patients").document(email).get()
+    if user_doc.exists:
+        user_data = user_doc.to_dict()
+        if verify_password(password, user_data['password']):
+            return {"success": True, "email": email}
+    
+    raise HTTPException(status_code=401, detail="Invalid Credentials")
 
 @app.post("/register-token")
 @app.post("/update-fcm-token")
@@ -64,7 +82,6 @@ async def register_token(request: Request):
     if not user_id or not fcm_token:
         raise HTTPException(status_code=400, detail="Missing user_id or fcm_token")
 
-    # Persistent storage in Firestore
     db.collection("patients").document(user_id).set({
         "fcm_token": fcm_token,
         "last_updated": firestore.SERVER_TIMESTAMP
@@ -73,82 +90,53 @@ async def register_token(request: Request):
     logger.info(f"🚀 Token persisted in Firestore for {user_id}")
     return {"status": "success"}
 
-# --- DOCUMENT UPLOAD & SECURE SHARING ---
+# --- DATA SAVING & UPLOADING ---
 
 @app.post("/documents/upload")
 async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
     try:
-        # 1. Upload file to Firebase Storage
         blob_path = f"documents/{email}/{file.filename}"
         blob = bucket.blob(blob_path)
         file_data = await file.read()
         blob.upload_from_string(file_data, content_type=file.content_type)
 
-        # 2. Generate a 5-minute Signed URL for immediate viewing
         signed_url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(minutes=5),
             method="GET"
         )
 
-        # 3. Save file metadata to Firestore
-        doc_ref = db.collection("documents").document()
-        doc_ref.set({
+        db.collection("documents").add({
             "patient_email": email,
             "filename": file.filename,
-            "file_type": file.content_type,
             "upload_date": firestore.SERVER_TIMESTAMP,
             "storage_path": blob_path
         })
 
-        # 4. HIPAA Audit Log Entry
-        audit_ref = db.collection("audit_logs").document()
-        audit_ref.set({
-            "timestamp": firestore.SERVER_TIMESTAMP,
-            "user": email,
-            "action": "UPLOAD_DOCUMENT",
-            "file": file.filename,
-            "details": f"Secure upload to {blob_path}"
-        })
-
-        # 5. Notify the User via FCM
-        user_doc = db.collection("patients").document(email).get()
-        if user_doc.exists:
-            token = user_doc.to_dict().get("fcm_token")
-            if token:
-                message = messaging.Message(
-                    notification=messaging.Notification(
-                        title="New Medical Record", 
-                        body=f"Document '{file.filename}' has been secured."
-                    ),
-                    token=token
-                )
-                messaging.send(message)
-                logger.info(f"✅ FCM Notification sent for {email}")
-
-        return {
-            "success": True, 
-            "signed_url": signed_url,
-            "message": "File secured and audit log created."
-        }
-
+        return {"success": True, "signed_url": signed_url}
     except Exception as e:
-        logger.error(f"❌ Upload/FCM Failure: {e}")
+        logger.error(f"Upload Failure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- DATA FETCHING & DEBUG ---
+# --- DEBUG & MIGRATION ROUTES ---
+
+@app.post("/debug/seed-zach")
+async def seed_zach():
+    """Creates the Zach user in Firestore so login works."""
+    hashed_pw = hash_password("helloandgoodbye0")
+    db.collection("patients").document("zach@example.com").set({
+        "name": "Zach Firestore",
+        "email": "zach@example.com",
+        "password": hashed_pw,
+        "dob": "1980-01-01",
+        "status": "Stable"
+    })
+    return {"success": "User zach@example.com created in Firestore!"}
 
 @app.get("/debug/db-check")
-async def db_check(email: str = "zach@example.com"):
-    user_doc = db.collection("patients").document(email).get()
-    if user_doc.exists:
-        return {"zach_record": user_doc.to_dict()}
-    return {"detail": "User not found in Firestore"}
-
-@app.get("/documents")
-async def get_documents_list(email: str = "zach@example.com"):
-    docs_query = db.collection("documents").where("patient_email", "==", email).stream()
-    return [d.to_dict() for d in docs_query]
+async def db_check():
+    user_doc = db.collection("patients").document("zach@example.com").get()
+    return {"zach_record": user_doc.to_dict() if user_doc.exists else "Not Found"}
 
 if __name__ == "__main__":
     import uvicorn
