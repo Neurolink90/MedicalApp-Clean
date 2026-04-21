@@ -25,7 +25,8 @@ try:
             decoded_bytes = base64.b64decode(firebase_b64.strip())
             firebase_info = json.loads(decoded_bytes.decode('utf-8'))
             cred = credentials.Certificate(firebase_info)
-            # Initialize with Storage bucket
+            
+            # Updated with your verified bucket name
             firebase_admin.initialize_app(cred, {
                 'storageBucket': 'medirecords-pro.firebasestorage.app'
             })
@@ -46,7 +47,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- 1. THE PIVOT TO PERSISTENCE (FIRESTORE) ---
+# --- TOKEN REGISTRATION ---
 
 @app.post("/register-token")
 @app.post("/update-fcm-token")
@@ -63,7 +64,7 @@ async def register_token(request: Request):
     if not user_id or not fcm_token:
         raise HTTPException(status_code=400, detail="Missing user_id or fcm_token")
 
-    # Save to Firestore (Persistent across restarts)
+    # Persistent storage in Firestore
     db.collection("patients").document(user_id).set({
         "fcm_token": fcm_token,
         "last_updated": firestore.SERVER_TIMESTAMP
@@ -72,7 +73,7 @@ async def register_token(request: Request):
     logger.info(f"🚀 Token persisted in Firestore for {user_id}")
     return {"status": "success"}
 
-# --- 2. SECURE FILE LOGIC & 3. AUDIT LOGGING ---
+# --- DOCUMENT UPLOAD & SECURE SHARING ---
 
 @app.post("/documents/upload")
 async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
@@ -83,14 +84,14 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
         file_data = await file.read()
         blob.upload_from_string(file_data, content_type=file.content_type)
 
-        # 2. Generate a 5-minute Signed URL
+        # 2. Generate a 5-minute Signed URL for immediate viewing
         signed_url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(minutes=5),
             method="GET"
         )
 
-        # 3. Save metadata to Firestore
+        # 3. Save file metadata to Firestore
         doc_ref = db.collection("documents").document()
         doc_ref.set({
             "patient_email": email,
@@ -100,17 +101,17 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
             "storage_path": blob_path
         })
 
-        # 4. AUDIT LOG (HIPAA Compliance)
+        # 4. HIPAA Audit Log Entry
         audit_ref = db.collection("audit_logs").document()
         audit_ref.set({
             "timestamp": firestore.SERVER_TIMESTAMP,
             "user": email,
             "action": "UPLOAD_DOCUMENT",
             "file": file.filename,
-            "details": f"File uploaded to {blob_path}"
+            "details": f"Secure upload to {blob_path}"
         })
 
-        # 5. Trigger FCM Notification
+        # 5. Notify the User via FCM
         user_doc = db.collection("patients").document(email).get()
         if user_doc.exists:
             token = user_doc.to_dict().get("fcm_token")
@@ -118,30 +119,31 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
                 message = messaging.Message(
                     notification=messaging.Notification(
                         title="New Medical Record", 
-                        body=f"Document '{file.filename}' is now secured."
+                        body=f"Document '{file.filename}' has been secured."
                     ),
                     token=token
                 )
                 messaging.send(message)
+                logger.info(f"✅ FCM Notification sent for {email}")
 
         return {
             "success": True, 
             "signed_url": signed_url,
-            "message": "File secured and logged."
+            "message": "File secured and audit log created."
         }
 
     except Exception as e:
-        logger.error(f"Upload Failure: {e}")
+        logger.error(f"❌ Upload/FCM Failure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- DEBUG & HELPERS ---
+# --- DATA FETCHING & DEBUG ---
 
 @app.get("/debug/db-check")
 async def db_check(email: str = "zach@example.com"):
     user_doc = db.collection("patients").document(email).get()
     if user_doc.exists:
         return {"zach_record": user_doc.to_dict()}
-    return {"detail": "Not Found in Firestore"}
+    return {"detail": "User not found in Firestore"}
 
 @app.get("/documents")
 async def get_documents_list(email: str = "zach@example.com"):
