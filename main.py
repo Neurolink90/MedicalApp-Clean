@@ -35,6 +35,7 @@ try:
             decoded_bytes = base64.b64decode(firebase_b64.strip())
             firebase_info = json.loads(decoded_bytes.decode('utf-8'))
             cred = credentials.Certificate(firebase_info)
+            # Initializing with your verified bucket name
             firebase_admin.initialize_app(cred, {
                 'storageBucket': 'medirecords-pro.firebasestorage.app'
             })
@@ -58,13 +59,11 @@ app.add_middleware(
 
 @app.post("/login")
 async def login(email: str = Form(...), password: str = Form(...)):
-    # Now looks in Firestore instead of SQLite
     user_doc = db.collection("patients").document(email).get()
     if user_doc.exists:
         user_data = user_doc.to_dict()
         if verify_password(password, user_data['password']):
             return {"success": True, "email": email}
-    
     raise HTTPException(status_code=401, detail="Invalid Credentials")
 
 @app.post("/register-token")
@@ -90,7 +89,7 @@ async def register_token(request: Request):
     logger.info(f"🚀 Token persisted in Firestore for {user_id}")
     return {"status": "success"}
 
-# --- DATA SAVING & UPLOADING ---
+# --- DOCUMENT MANAGEMENT (UPLOAD & LIST) ---
 
 @app.post("/documents/upload")
 async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
@@ -100,29 +99,88 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
         file_data = await file.read()
         blob.upload_from_string(file_data, content_type=file.content_type)
 
+        # Immediate preview URL (expires in 5 mins)
         signed_url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(minutes=5),
             method="GET"
         )
 
+        # Store metadata in Firestore
         db.collection("documents").add({
             "patient_email": email,
             "filename": file.filename,
-            "upload_date": firestore.SERVER_TIMESTAMP,
+            "file_type": file.content_type,
+            "upload_date": datetime.now().strftime('%Y-%m-%d'),
             "storage_path": blob_path
         })
+
+        # Audit Log Entry
+        db.collection("audit_logs").add({
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "user": email,
+            "action": "UPLOAD_DOCUMENT",
+            "file": file.filename
+        })
+
+        # Notify via FCM
+        user_doc = db.collection("patients").document(email).get()
+        if user_doc.exists:
+            token = user_doc.to_dict().get("fcm_token")
+            if token:
+                message = messaging.Message(
+                    notification=messaging.Notification(
+                        title="New Record Uploaded", 
+                        body=f"'{file.filename}' is now encrypted and stored."
+                    ),
+                    token=token
+                )
+                messaging.send(message)
 
         return {"success": True, "signed_url": signed_url}
     except Exception as e:
         logger.error(f"Upload Failure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- DEBUG & MIGRATION ROUTES ---
+@app.get("/documents")
+async def get_documents_list(email: str):
+    docs_query = db.collection("documents").where("patient_email", "==", email).stream()
+    return [d.to_dict() for d in docs_query]
+
+# --- THE "SHARE" ENDPOINT (FOR QR CODES) ---
+
+@app.get("/documents/share")
+async def share_document(email: str, filename: str):
+    """Generates a new signed URL and logs the sharing event."""
+    try:
+        blob_path = f"documents/{email}/{filename}"
+        blob = bucket.blob(blob_path)
+
+        # Generate a fresh 5-minute guest pass
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(minutes=5),
+            method="GET"
+        )
+
+        # HIPAA Audit Log: Track WHO generated the pass
+        db.collection("audit_logs").add({
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "user": email,
+            "action": "GENERATE_SHARE_QR",
+            "file": filename,
+            "details": "Signed URL generated for QR code display"
+        })
+
+        return {"signed_url": signed_url}
+    except Exception as e:
+        logger.error(f"Sharing Failure: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- DEBUG & MIGRATION ---
 
 @app.post("/debug/seed-zach")
 async def seed_zach():
-    """Creates the Zach user in Firestore so login works."""
     hashed_pw = hash_password("helloandgoodbye0")
     db.collection("patients").document("zach@example.com").set({
         "name": "Zach Firestore",
