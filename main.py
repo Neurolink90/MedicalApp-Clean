@@ -30,19 +30,24 @@ def verify_password(password: str, hashed: str) -> bool:
 # --- FIREBASE ADMIN SDK ---
 try:
     if not firebase_admin._apps:
+        # Fetching the Base64 config from Render environment variables
         firebase_b64 = os.getenv("FIREBASE_CONFIG_JSON")
         if firebase_b64:
             decoded_bytes = base64.b64decode(firebase_b64.strip())
             firebase_info = json.loads(decoded_bytes.decode('utf-8'))
             cred = credentials.Certificate(firebase_info)
+            
             # Initializing with your verified bucket name
             firebase_admin.initialize_app(cred, {
                 'storageBucket': 'medirecords-pro.firebasestorage.app'
             })
             logger.info("✅ Firebase Admin initialized with Firestore and Storage!")
+        else:
+            logger.error("❌ FIREBASE_CONFIG_JSON environment variable not found!")
 except Exception as e:
     logger.error(f"❌ Firebase Init Error: {e}")
 
+# Initialize Global Clients
 db = firestore.client()
 bucket = storage.bucket()
 
@@ -55,10 +60,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- AUTH & TOKEN ---
+# --- AUTH & TOKEN MANAGEMENT ---
 
 @app.post("/login")
 async def login(email: str = Form(...), password: str = Form(...)):
+    """Authenticates a user against Firestore data."""
     user_doc = db.collection("patients").document(email).get()
     if user_doc.exists:
         user_data = user_doc.to_dict()
@@ -69,6 +75,7 @@ async def login(email: str = Form(...), password: str = Form(...)):
 @app.post("/register-token")
 @app.post("/update-fcm-token")
 async def register_token(request: Request):
+    """Saves the FCM token to Firestore for background notifications."""
     if request.headers.get('content-type') == 'application/json':
         data = await request.json()
         user_id = data.get('user_id')
@@ -93,20 +100,21 @@ async def register_token(request: Request):
 
 @app.post("/documents/upload")
 async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
+    """Uploads file to Storage, generates Signed URL, and logs the event."""
     try:
         blob_path = f"documents/{email}/{file.filename}"
         blob = bucket.blob(blob_path)
         file_data = await file.read()
         blob.upload_from_string(file_data, content_type=file.content_type)
 
-        # Immediate preview URL (expires in 5 mins)
+        # Generate a 5-minute guest pass for immediate viewing
         signed_url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(minutes=5),
             method="GET"
         )
 
-        # Store metadata in Firestore
+        # Save metadata to Firestore
         db.collection("documents").add({
             "patient_email": email,
             "filename": file.filename,
@@ -115,15 +123,16 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
             "storage_path": blob_path
         })
 
-        # Audit Log Entry
+        # HIPAA Audit Log Entry
         db.collection("audit_logs").add({
             "timestamp": firestore.SERVER_TIMESTAMP,
             "user": email,
             "action": "UPLOAD_DOCUMENT",
-            "file": file.filename
+            "file": file.filename,
+            "details": f"Secure upload to {blob_path}"
         })
 
-        # Notify via FCM
+        # Notify the User via FCM
         user_doc = db.collection("patients").document(email).get()
         if user_doc.exists:
             token = user_doc.to_dict().get("fcm_token")
@@ -139,31 +148,31 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
 
         return {"success": True, "signed_url": signed_url}
     except Exception as e:
-        logger.error(f"Upload Failure: {e}")
+        logger.error(f"❌ Upload Failure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/documents")
 async def get_documents_list(email: str):
+    """Fetches list of document metadata from Firestore."""
     docs_query = db.collection("documents").where("patient_email", "==", email).stream()
     return [d.to_dict() for d in docs_query]
 
-# --- THE "SHARE" ENDPOINT (FOR QR CODES) ---
+# --- SECURE SHARING & AUDIT LOGS ---
 
 @app.get("/documents/share")
 async def share_document(email: str, filename: str):
-    """Generates a new signed URL and logs the sharing event."""
+    """Generates a fresh 5-minute guest pass for QR code sharing."""
     try:
         blob_path = f"documents/{email}/{filename}"
         blob = bucket.blob(blob_path)
 
-        # Generate a fresh 5-minute guest pass
         signed_url = blob.generate_signed_url(
             version="v4",
             expiration=timedelta(minutes=5),
             method="GET"
         )
 
-        # HIPAA Audit Log: Track WHO generated the pass
+        # Track WHO generated the pass in the Audit Log
         db.collection("audit_logs").add({
             "timestamp": firestore.SERVER_TIMESTAMP,
             "user": email,
@@ -174,13 +183,36 @@ async def share_document(email: str, filename: str):
 
         return {"signed_url": signed_url}
     except Exception as e:
-        logger.error(f"Sharing Failure: {e}")
+        logger.error(f"❌ Sharing Failure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-# --- DEBUG & MIGRATION ---
+@app.get("/audit-logs")
+async def get_audit_logs(email: str):
+    """Fetches history of actions for the specific user."""
+    try:
+        logs_query = db.collection("audit_logs") \
+            .where("user", "==", email) \
+            .order_by("timestamp", direction=firestore.Query.DESCENDING) \
+            .stream()
+            
+        results = []
+        for d in logs_query:
+            data = d.to_dict()
+            if data.get('timestamp'):
+                # Format timestamp for JSON readability
+                data['timestamp'] = data['timestamp'].strftime('%Y-%m-%d %H:%M:%S')
+            results.append(data)
+            
+        return results
+    except Exception as e:
+        logger.error(f"❌ Audit Fetch Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- DEBUG & SEEDING ---
 
 @app.post("/debug/seed-zach")
 async def seed_zach():
+    """Initializes the Zach user in Firestore for testing."""
     hashed_pw = hash_password("helloandgoodbye0")
     db.collection("patients").document("zach@example.com").set({
         "name": "Zach Firestore",
@@ -193,9 +225,12 @@ async def seed_zach():
 
 @app.get("/debug/db-check")
 async def db_check():
+    """Simple verification route to check the current user record."""
     user_doc = db.collection("patients").document("zach@example.com").get()
     return {"zach_record": user_doc.to_dict() if user_doc.exists else "Not Found"}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # Render provides the PORT environment variable
+    port = int(os.environ.get("PORT", 5000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
