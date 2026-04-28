@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
-// These paths assume medical_records_screen.dart is in lib/
-// and your other screens are in lib/screens/
+// These paths match your folder structure: lib/medical_records_screen.dart 
+// looks into lib/screens/
 import 'screens/document_list_screen.dart';
 import 'screens/audit_log_screen.dart';
+import 'login_screen.dart'; // Import this for the Logout function
 
 class MedicalRecordsScreen extends StatelessWidget {
   const MedicalRecordsScreen({super.key});
@@ -18,12 +19,11 @@ class MedicalRecordsScreen extends StatelessWidget {
         ),
         backgroundColor: Colors.blue[700],
         elevation: 0,
-        // Ensures the hamburger menu icon is white
+        // Automatically adds the "Hamburger" icon because we have a 'drawer'
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       
       // --- THE NAVIGATION DRAWER ---
-      // This is the "Hamburger Menu" that slides out from the left
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -83,15 +83,18 @@ class MedicalRecordsScreen extends StatelessWidget {
               leading: const Icon(Icons.logout, color: Colors.grey),
               title: const Text("Logout"),
               onTap: () {
-                // Navigates back to Login and clears the navigation stack
-                Navigator.pushReplacementNamed(context, '/'); 
+                // Safely returns to login and clears the session stack
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
               },
             ),
           ],
         ),
       ),
       
-      // --- THE MAIN DASHBOARD BODY ---
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -108,7 +111,7 @@ class MedicalRecordsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             
-            // A quick-action card on the main screen for easy access
+            // Quick-action card
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -120,7 +123,7 @@ class MedicalRecordsScreen extends StatelessWidget {
                     color: Colors.blue[50], 
                     shape: BoxShape.circle
                   ),
-                  child: Icon(Icons.qr_code_scanner, color: Colors.blue[700], size: 30),
+                  child: const Icon(Icons.qr_code_scanner, color: Colors.blue, size: 30),
                 ),
                 title: const Text("Share Records", style: TextStyle(fontWeight: FontWeight.bold)),
                 subtitle: const Text("Generate a secure 5-minute pass for your doctor."),
