@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-// IMPORTANT: Adjust these paths if your files are in the same directory.
-// If they are all in the 'lib' folder together, remove the 'screens/' part.
+// These paths assume medical_records_screen.dart is in lib/
+// and your other screens are in lib/screens/
 import 'screens/document_list_screen.dart';
 import 'screens/audit_log_screen.dart';
 
@@ -12,13 +12,18 @@ class MedicalRecordsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Patient Dashboard", style: TextStyle(color: Colors.white)),
+        title: const Text(
+          "Patient Dashboard", 
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+        ),
         backgroundColor: Colors.blue[700],
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white), // Makes the hamburger menu white
+        // Ensures the hamburger menu icon is white
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       
       // --- THE NAVIGATION DRAWER ---
+      // This is the "Hamburger Menu" that slides out from the left
       drawer: Drawer(
         child: ListView(
           padding: EdgeInsets.zero,
@@ -78,7 +83,7 @@ class MedicalRecordsScreen extends StatelessWidget {
               leading: const Icon(Icons.logout, color: Colors.grey),
               title: const Text("Logout"),
               onTap: () {
-                // Returns to the login screen and clears the navigation stack
+                // Navigates back to Login and clears the navigation stack
                 Navigator.pushReplacementNamed(context, '/'); 
               },
             ),
@@ -103,7 +108,7 @@ class MedicalRecordsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 32),
             
-            // A quick-action card on the main screen
+            // A quick-action card on the main screen for easy access
             Card(
               elevation: 4,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -111,7 +116,10 @@ class MedicalRecordsScreen extends StatelessWidget {
                 contentPadding: const EdgeInsets.all(16),
                 leading: Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.blue[50], shape: BoxShape.circle),
+                  decoration: BoxDecoration(
+                    color: Colors.blue[50], 
+                    shape: BoxShape.circle
+                  ),
                   child: Icon(Icons.qr_code_scanner, color: Colors.blue[700], size: 30),
                 ),
                 title: const Text("Share Records", style: TextStyle(fontWeight: FontWeight.bold)),
