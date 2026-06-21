@@ -1,0 +1,22 @@
+{
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "medirecords-pro",
+          "configurations": {
+            "android": "1:379331373787:android:8266f12f0d0c755e2a7afe",
+            "ios": "1:379331373787:ios:a39d0e5a0bc19b9d2a7afe",
+            "web": "1:379331373787:web:33555fcacc7fa3a92a7afe"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

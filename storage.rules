@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      // The Python backend uses the Admin SDK. Client access is completely blocked.
+      allow read, write: if false;
+    }
+  }
+}

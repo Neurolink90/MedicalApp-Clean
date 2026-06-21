@@ -1,46 +1,63 @@
-import 'dart:async';
-import 'dart:js' as js;
-import 'package:http/http.dart' as http;
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class FCMTokenService {
-  final String backendUrl = "https://medicalapp-clean.onrender.com";
+  static const _backendUrl = "https://medicalapp-clean.onrender.com";
 
-  Future<void> listenAndRegisterToken(String userId) async {
-    if (!kIsWeb) return;
-
-    Timer.periodic(const Duration(seconds: 2), (timer) async {
-      try {
-        final String? token = js.context['capturedToken'];
-        if (token != null && token.isNotEmpty) {
-          debugPrint("✅ Token captured: $token");
-          await _sendTokenToBackend(userId, token);
-          timer.cancel(); 
-        }
-      } catch (e) {
-        debugPrint("Waiting for JS context...");
-      }
-    });
-  }
-
-  Future<void> _sendTokenToBackend(String userId, String token) async {
+  /// Call once after login. Gets token and sends it to the backend.
+  static Future<void> registerToken(String userId) async {
     try {
-      // We are sending as Form data to match Python's 'Form(...)'
-      final response = await http.post(
-        Uri.parse("$backendUrl/register-token"),
-        body: {
-          'user_id': userId, 
-          'fcm_token': token
-        },
+      // Request permission (required on iOS, recommended on Android 13+)
+      final settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
       );
 
-      if (response.statusCode == 200) {
-        debugPrint("🚀 Token synced successfully!");
+      if (settings.authorizationStatus == AuthorizationStatus.denied) {
+        debugPrint("⚠️ FCM permission denied");
+        return;
+      }
+
+      // getToken works on Android, iOS, and Web — no dart:js needed
+      final token = await FirebaseMessaging.instance.getToken(
+        // vapidKey is only used on Web — mobile ignores it safely
+        vapidKey: kIsWeb
+            ? "BKSqwX3_MZ4NgdD8BPmC1hXRDHj6qdLhIeqL6Epf-D6-2w3lBG1DKSYzbvPhNppDn89Hr_5DXRpXHVP12fpaC9Y"
+            : null,
+      );
+
+      if (token == null) {
+        debugPrint("⚠️ FCM token was null");
+        return;
+      }
+
+      debugPrint("✅ FCM token retrieved");
+      await _sendToBackend(userId, token);
+
+      // Keep token fresh if Firebase rotates it
+      FirebaseMessaging.instance.onTokenRefresh.listen((newToken) {
+        _sendToBackend(userId, newToken);
+      });
+    } catch (e) {
+      debugPrint("❌ FCMTokenService error: $e");
+    }
+  }
+
+  static Future<void> _sendToBackend(String userId, String token) async {
+    try {
+      final res = await http.post(
+        Uri.parse("$_backendUrl/register-token"),
+        body: {'user_id': userId, 'fcm_token': token},
+      );
+      if (res.statusCode == 200) {
+        debugPrint("🚀 FCM token synced for $userId");
       } else {
-        debugPrint("⚠️ Sync failed: ${response.statusCode}");
+        debugPrint("⚠️ Token sync failed: ${res.statusCode}");
       }
     } catch (e) {
-      debugPrint("❌ Error: $e");
+      debugPrint("❌ Token POST error: $e");
     }
   }
 }

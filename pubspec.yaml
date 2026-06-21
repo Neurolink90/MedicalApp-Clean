@@ -1,8 +1,7 @@
 name: medical_app
-description: A cross-platform medical records app for secure patient management, analysis, and reminders.
+description: MediRecords Pro - Secure cross-platform medical records app.
 
 publish_to: 'none'
-
 version: 1.0.0+1
 
 environment:
@@ -13,19 +12,30 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  http: ^1.2.1
-  table_calendar: ^3.1.2
-  flutter_local_notifications: ^17.2.2
-  intl: ^0.19.0
-  url_launcher: ^6.2.5
-  file_picker: ^8.0.0
-  mime: ^1.0.4
-  qr_flutter: ^4.1.0
 
-  # --- UPDATED STABLE WEB VERSIONS ---
-  firebase_core: ^3.1.1
+  # Networking
+  http: ^1.2.1
+
+  # Firebase — pinned stable set
+  firebase_core:      ^3.1.1
+  firebase_core_web:  ^2.17.1
+  firebase_auth:      ^5.1.2
   firebase_messaging: ^15.0.3
-  firebase_core_web: ^2.17.1
+  cloud_firestore:    ^5.0.0
+
+  # UI & Utilities
+  table_calendar:              ^3.1.2
+  flutter_local_notifications: ^17.2.2
+  intl:                        ^0.19.0
+  url_launcher:                ^6.2.5
+  file_picker:                 ^8.0.0
+  mime:                        ^1.0.4
+  qr_flutter:                  ^4.1.0
+  shared_preferences:          ^2.2.3
+  local_auth:                  ^2.3.0
+
+  # Timezone support — required for scheduled medication notifications
+  timezone:                    ^0.9.4
 
 dev_dependencies:
   flutter_test:
