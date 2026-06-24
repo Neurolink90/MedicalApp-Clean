@@ -4,8 +4,10 @@ import base64
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, Form, HTTPException, File, UploadFile, Request
+from fastapi import FastAPI, Form, HTTPException, File, UploadFile, Request, Body
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import stripe
 import firebase_admin
 from firebase_admin import credentials, messaging, firestore, storage, auth
 
@@ -15,26 +17,48 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="MediRecords Pro API")
 
+# ── Stripe Setup ──────────────────────────────────────────────────────────────
+# Set STRIPE_SECRET_KEY in Render environment variables — never hardcode
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+
 # ── Firebase Admin Init ───────────────────────────────────────────────────────
 try:
     if not firebase_admin._apps:
         firebase_b64 = os.getenv("FIREBASE_CONFIG_JSON")
-        if not firebase_b64:
-            raise ValueError("FIREBASE_CONFIG_JSON env var not set")
-        decoded   = base64.b64decode(firebase_b64.strip())
-        cred_info = json.loads(decoded.decode("utf-8"))
-        cred      = credentials.Certificate(cred_info)
-        firebase_admin.initialize_app(cred, {
-            "storageBucket": "medirecords-pro.firebasestorage.app"
-        })
-        logger.info("✅ Firebase Admin initialized")
+        key_path = "/etc/secrets/serviceAccountKey.json"
+
+        if firebase_b64:
+            decoded   = base64.b64decode(firebase_b64.strip())
+            cred_info = json.loads(decoded.decode("utf-8"))
+            cred      = credentials.Certificate(cred_info)
+            firebase_admin.initialize_app(cred, {
+                "storageBucket": "medirecords-pro.firebasestorage.app"
+            })
+            logger.info("✅ Firebase Admin initialized from Base64 env var")
+        elif os.path.exists(key_path):
+            # Local development fallback only — gitignored, never in production
+            cred = credentials.Certificate(key_path)
+            firebase_admin.initialize_app(cred, {
+                "storageBucket": "medirecords-pro.firebasestorage.app"
+            })
+            logger.info(f"✅ Firebase initialized from local {key_path}")
+        else:
+            logger.warning("⚠️ No Firebase credentials found. DB will be offline.")
 except Exception as e:
     logger.error(f"❌ Firebase Init Error: {e}")
 
-db     = firestore.client()
-bucket = storage.bucket()
+# Safely initialize clients so server starts even if Firebase is offline
+try:
+    db     = firestore.client()
+    bucket = storage.bucket()
+except Exception as e:
+    db     = None
+    bucket = None
+    logger.warning(f"⚠️ Firebase clients offline: {e}")
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
+# No wildcard — wildcard + allow_credentials is rejected by browsers
+# and is insecure for a medical app
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -47,11 +71,146 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Stripe Checkout ───────────────────────────────────────────────────────────
+@app.post("/create-checkout-session")
+async def create_checkout_session(data: dict = Body(...)):
+    """
+    Creates a Stripe Checkout session for the Personal subscription.
+    Flutter calls this when user taps Subscribe on the paywall.
+    Returns a URL that Flutter opens in the device browser.
+    """
+    if not stripe.api_key:
+        raise HTTPException(status_code=500, detail="Stripe not configured on server")
+
+    email = data.get("email", "")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email required")
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "usd",
+                    "product_data": {
+                        "name": "MediRecords Pro — Personal",
+                        "description": (
+                            "Unlimited records, QR sharing, medication tracker, "
+                            "appointment calendar, emergency QR, biometric lock"
+                        ),
+                    },
+                    "unit_amount": 999,  # $9.99 in cents
+                    "recurring": {"interval": "month"},
+                },
+                "quantity": 1,
+            }],
+            mode="subscription",
+            customer_email=email,
+            metadata={"patient_email": email},
+            success_url=(
+                "https://medicalapp-clean.onrender.com/payment-success"
+                "?session_id={CHECKOUT_SESSION_ID}"
+            ),
+            cancel_url="https://medicalapp-clean.onrender.com/payment-cancelled",
+        )
+        logger.info(f"✅ Stripe session created for {email}")
+        return {"url": session.url}
+
+    except stripe.error.StripeError as e:
+        logger.error(f"❌ Stripe error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Checkout session error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/stripe-webhook")
+async def stripe_webhook(request: Request):
+    """
+    Receives Stripe events after payment completes.
+    Verifies webhook signature then updates subscription_tier in Firestore.
+    Set STRIPE_WEBHOOK_SECRET in Render environment variables.
+    """
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+    payload        = await request.body()
+    sig_header     = request.headers.get("stripe-signature")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, webhook_secret
+        )
+    except stripe.error.SignatureVerificationError:
+        logger.error("❌ Stripe webhook signature verification failed")
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    except Exception as e:
+        logger.error(f"❌ Webhook parse error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if event["type"] == "checkout.session.completed":
+        session       = event["data"]["object"]
+        patient_email = session.get("metadata", {}).get("patient_email")
+
+        if patient_email and db:
+            db.collection("patients").document(patient_email).set(
+                {
+                    "subscription_tier":    "personal",
+                    "subscription_updated": firestore.SERVER_TIMESTAMP,
+                },
+                merge=True,
+            )
+            db.collection("audit_logs").add({
+                "timestamp": firestore.SERVER_TIMESTAMP,
+                "user":      patient_email,
+                "action":    "SUBSCRIPTION_UPGRADED",
+                "file":      "",
+                "details":   "Upgraded to Personal tier via Stripe",
+            })
+            logger.info(f"✅ Subscription activated for {patient_email}")
+
+    elif event["type"] in ("customer.subscription.deleted",
+                           "customer.subscription.paused"):
+        customer_id = event["data"]["object"].get("customer")
+        if customer_id and db:
+            try:
+                customer      = stripe.Customer.retrieve(customer_id)
+                patient_email = customer.get("email")
+                if patient_email:
+                    db.collection("patients").document(patient_email).set(
+                        {"subscription_tier": "free"},
+                        merge=True,
+                    )
+                    logger.info(f"⬇️ Subscription downgraded for {patient_email}")
+            except Exception as e:
+                logger.error(f"❌ Downgrade error: {e}")
+
+    return {"status": "received"}
+
+
+@app.get("/payment-success")
+async def payment_success(session_id: str = ""):
+    """User-facing landing page after successful Stripe checkout."""
+    return {
+        "message": (
+            "Payment successful! Open the MediRecords Pro app "
+            "to access your subscription."
+        ),
+        "session_id": session_id,
+    }
+
+
+@app.get("/payment-cancelled")
+async def payment_cancelled():
+    """User-facing landing page when user cancels Stripe checkout."""
+    return {"message": "Payment cancelled. Return to the app to try again."}
+
+
 # ── FCM Token Registration ────────────────────────────────────────────────────
 @app.post("/register-token")
 @app.post("/update-fcm-token")
 async def register_token(request: Request):
-    """Accepts JSON or Form data and saves FCM token to Firestore."""
+    if not db:
+        raise HTTPException(status_code=500, detail="Database disconnected")
+
     content_type = request.headers.get("content-type", "")
     if "application/json" in content_type:
         data      = await request.json()
@@ -76,33 +235,42 @@ async def register_token(request: Request):
 @app.get("/patients/{email}")
 @app.get("/profile")
 async def get_profile(email: str):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database disconnected")
+
     doc = db.collection("patients").document(email).get()
     if doc.exists:
         data = doc.to_dict()
-        data.pop("password", None)
-        data.pop("fcm_token", None)
+        data.pop("password",   None)
+        data.pop("fcm_token",  None)
         return data
     return {"name": "New User", "email": email, "status": "Stable"}
 
 @app.get("/patients")
 async def get_all_patients():
+    if not db:
+        raise HTTPException(status_code=500, detail="Database disconnected")
+
     docs = db.collection("patients").stream()
     results = []
     for d in docs:
         data = d.to_dict()
-        data.pop("password", None)
+        data.pop("password",  None)
         data.pop("fcm_token", None)
         results.append(data)
     return results
 
 @app.get("/appointments")
 async def get_appointments(email: str = ""):
-    # Kept as a lightweight UptimeRobot ping target
+    # Lightweight UptimeRobot ping target — returns immediately
     return [{"title": "Annual Checkup", "date": "2026-06-15", "time": "10:00 AM"}]
 
 # ── Document Upload ───────────────────────────────────────────────────────────
 @app.post("/documents/upload")
 async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
+    if not db or not bucket:
+        raise HTTPException(status_code=500, detail="Firebase disconnected")
+
     try:
         blob_path = f"documents/{email}/{file.filename}"
         blob      = bucket.blob(blob_path)
@@ -131,7 +299,6 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
             "details":   f"Encrypted upload to {blob_path}",
         })
 
-        # FCM notification
         user_doc = db.collection("patients").document(email).get()
         if user_doc.exists:
             token = user_doc.to_dict().get("fcm_token")
@@ -156,6 +323,9 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
 # ── Document List ─────────────────────────────────────────────────────────────
 @app.get("/documents")
 async def get_documents(email: str):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database disconnected")
+
     docs = db.collection("documents").where(
         "patient_email", "==", email).stream()
     return [d.to_dict() for d in docs]
@@ -163,6 +333,9 @@ async def get_documents(email: str):
 # ── QR Share ──────────────────────────────────────────────────────────────────
 @app.get("/documents/share")
 async def share_document(email: str, filename: str):
+    if not db or not bucket:
+        raise HTTPException(status_code=500, detail="Firebase disconnected")
+
     try:
         blob_path  = f"documents/{email}/{filename}"
         blob       = bucket.blob(blob_path)
@@ -188,6 +361,9 @@ async def share_document(email: str, filename: str):
 # ── Audit Logs ────────────────────────────────────────────────────────────────
 @app.get("/audit-logs")
 async def get_audit_logs(email: str):
+    if not db:
+        raise HTTPException(status_code=500, detail="Database disconnected")
+
     try:
         query = (
             db.collection("audit_logs")

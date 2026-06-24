@@ -1,7 +1,8 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 firebase-admin
 cryptography
 bcrypt
 requests
+stripe
