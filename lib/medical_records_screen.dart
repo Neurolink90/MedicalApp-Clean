@@ -1,14 +1,144 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:url_launcher/url_launcher.dart';
 import 'screens/document_list_screen.dart';
 import 'screens/audit_log_screen.dart';
 import 'screens/medication_tracker_screen.dart';
 import 'screens/emergency_qr_screen.dart';
+import 'screens/appointment_calendar_screen.dart';
 import 'login_screen.dart';
 
 class MedicalRecordsScreen extends StatelessWidget {
   final String userEmail;
   const MedicalRecordsScreen({super.key, required this.userEmail});
+
+  void _showPaywall(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.workspace_premium, size: 72, color: Colors.amber[600]),
+            const SizedBox(height: 16),
+            const Text(
+              'Upgrade to Personal',
+              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Unlock the full power of MediRecords Pro.',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 32),
+            _benefitRow(Icons.health_and_safety, Colors.red, 'Offline Emergency Access QR'),
+            _benefitRow(Icons.calendar_month, Colors.indigo, 'Appointment Calendar & Reminders'),
+            _benefitRow(Icons.medication, Colors.teal, 'Unlimited Medication Tracking'),
+            _benefitRow(Icons.fingerprint, Colors.blue, 'Biometric App Lock'),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue[700],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _launchStripeCheckout(context);
+                },
+                child: const Text('Subscribe for $9.99 / month',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Maybe Later', style: TextStyle(color: Colors.grey)),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _benefitRow(IconData icon, Color color, String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+                color: color.withOpacity(0.1), shape: BoxShape.circle),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+              child: Text(text,
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w500))),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchStripeCheckout(BuildContext context) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Preparing secure checkout...')),
+    );
+
+    try {
+      // NOTE: Using your production backend URL. If testing locally, switch to: 
+      // http://10.0.2.2:8000/create-checkout-session (for Android Emulator)
+      final url = Uri.parse('https://medicalapp-clean.onrender.com/create-checkout-session'); 
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'email': userEmail}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final checkoutUrl = Uri.parse(data['url']);
+        
+        if (await canLaunchUrl(checkoutUrl)) {
+          await launchUrl(checkoutUrl, mode: LaunchMode.externalApplication);
+        } else {
+          throw 'Could not launch browser.';
+        }
+      } else {
+        throw 'Failed to initialize checkout. Server responded with ${response.statusCode}.';
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Checkout Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  void _handleNavigation(BuildContext context, String currentTier,
+      {required Widget screen, required bool isPremium, bool isDrawer = false}) {
+    if (isDrawer) Navigator.pop(context); // Close drawer first if applicable
+
+    if (isPremium && currentTier != 'personal') {
+      _showPaywall(context);
+    } else {
+      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -17,174 +147,215 @@ class MedicalRecordsScreen extends StatelessWidget {
         ? displayName[0].toUpperCase() + displayName.substring(1)
         : 'there';
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Patient Dashboard',
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.blue[700],
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+    return StreamBuilder<DocumentSnapshot>(
+      // Listen to the user's profile to instantly unlock UI when Stripe webhook fires
+      stream: FirebaseFirestore.instance
+          .collection('patients')
+          .doc(userEmail)
+          .snapshots(),
+      builder: (context, snapshot) {
+        String tier = 'free'; // Default to free
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>?;
+          tier = data?['subscription_tier'] ?? 'free';
+        }
 
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: Colors.blue[700]),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  const Icon(Icons.account_circle,
-                      size: 50, color: Colors.white),
-                  const SizedBox(height: 10),
-                  Text(greeting,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold)),
-                  Text(userEmail,
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 13)),
-                  const SizedBox(height: 10),
-                ],
-              ),
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Patient Dashboard',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
+            backgroundColor: Colors.blue[700],
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+            actions: [
+              if (tier == 'personal')
+                const Padding(
+                  padding: EdgeInsets.only(right: 16),
+                  child: Center(
+                    child: Text('PRO',
+                        style: TextStyle(
+                            color: Colors.amber,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2)),
+                  ),
+                )
+            ],
+          ),
+          drawer: _buildDrawer(context, greeting, tier),
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Welcome back, $greeting.',
+                    style: const TextStyle(
+                        fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text('Your medical data is secured by Google Cloud.',
+                    style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+                const SizedBox(height: 32),
+
+                // FREE Features
+                _ActionCard(
+                  icon: Icons.qr_code_scanner,
+                  iconColor: Colors.blue,
+                  title: 'Share Records',
+                  subtitle: 'Generate a secure QR pass for your doctor.',
+                  onTap: () => _handleNavigation(context, tier,
+                      screen: DocumentListScreen(userEmail: userEmail),
+                      isPremium: false),
+                ),
+                const SizedBox(height: 16),
+
+                _ActionCard(
+                  icon: Icons.medication,
+                  iconColor: Colors.teal,
+                  title: 'Medication Tracker',
+                  subtitle: 'Manage medications and set daily reminders.',
+                  onTap: () => _handleNavigation(context, tier,
+                      screen: MedicationTrackerScreen(userEmail: userEmail),
+                      isPremium: false), // Soft gate: allowed, but limits inside
+                ),
+                const SizedBox(height: 16),
+
+                // PREMIUM Features
+                _ActionCard(
+                  icon: Icons.calendar_month,
+                  iconColor: Colors.indigo,
+                  title: 'Appointments',
+                  subtitle: 'Manage upcoming visits and schedules.',
+                  isPremium: tier != 'personal',
+                  onTap: () => _handleNavigation(context, tier,
+                      screen: AppointmentCalendarScreen(userEmail: userEmail),
+                      isPremium: true),
+                ),
+                const SizedBox(height: 16),
+
+                _ActionCard(
+                  icon: Icons.emergency,
+                  iconColor: Colors.red,
+                  title: 'Emergency Access QR',
+                  subtitle: 'Permanent QR for first responders.',
+                  isPremium: tier != 'personal',
+                  onTap: () => _handleNavigation(context, tier,
+                      screen: EmergencyQrScreen(userEmail: userEmail),
+                      isPremium: true),
+                ),
+                const SizedBox(height: 16),
+
+                _ActionCard(
+                  icon: Icons.security,
+                  iconColor: Colors.orange,
+                  title: 'Security Audit Trail',
+                  subtitle: 'Review who accessed your records.',
+                  onTap: () => _handleNavigation(context, tier,
+                      screen: AuditLogScreen(userEmail: userEmail),
+                      isPremium: false),
+                ),
+              ],
             ),
-            _drawerItem(
-              context,
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDrawer(BuildContext context, String greeting, String tier) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          DrawerHeader(
+            decoration: BoxDecoration(color: Colors.blue[700]),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.account_circle, size: 50, color: Colors.white),
+                    const Spacer(),
+                    if (tier == 'personal')
+                      const Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(greeting,
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(userEmail,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+          _drawerItem(context, tier,
               icon: Icons.folder_shared,
               color: Colors.blue,
               title: 'My Secure Records',
-              subtitle: 'View & Share via QR',
               screen: DocumentListScreen(userEmail: userEmail),
-            ),
-            _drawerItem(
-              context,
+              isPremium: false),
+          _drawerItem(context, tier,
               icon: Icons.medication,
               color: Colors.teal,
               title: 'Medication Tracker',
-              subtitle: 'Reminders & schedule',
               screen: MedicationTrackerScreen(userEmail: userEmail),
-            ),
-            _drawerItem(
-              context,
+              isPremium: false),
+          _drawerItem(context, tier,
+              icon: Icons.calendar_month,
+              color: Colors.indigo,
+              title: 'Appointments',
+              screen: AppointmentCalendarScreen(userEmail: userEmail),
+              isPremium: true),
+          _drawerItem(context, tier,
               icon: Icons.emergency,
               color: Colors.red,
               title: 'Emergency Access QR',
-              subtitle: 'For first responders',
               screen: EmergencyQrScreen(userEmail: userEmail),
-            ),
-            _drawerItem(
-              context,
+              isPremium: true),
+          _drawerItem(context, tier,
               icon: Icons.security,
               color: Colors.orange,
               title: 'Security Audit Trail',
-              subtitle: 'History of access',
               screen: AuditLogScreen(userEmail: userEmail),
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.grey),
-              title: const Text('Logout'),
-              onTap: () async {
-                await FirebaseAuth.instance.signOut();
-                if (context.mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const LoginScreen()),
-                    (route) => false,
-                  );
-                }
-              },
-            ),
-          ],
-        ),
-      ),
-
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Welcome back, $greeting.',
-                style: const TextStyle(
-                    fontSize: 24, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text('Your medical data is secured by Google Cloud.',
-                style: TextStyle(fontSize: 15, color: Colors.grey[600])),
-            const SizedBox(height: 32),
-
-            _ActionCard(
-              icon: Icons.qr_code_scanner,
-              iconColor: Colors.blue,
-              title: 'Share Records',
-              subtitle: 'Generate a secure 5-minute QR pass for your doctor.',
-              onTap: () => _push(
-                  context, DocumentListScreen(userEmail: userEmail)),
-            ),
-            const SizedBox(height: 16),
-
-            _ActionCard(
-              icon: Icons.medication,
-              iconColor: Colors.teal,
-              title: 'Medication Tracker',
-              subtitle: 'Manage medications and set daily reminders.',
-              onTap: () => _push(
-                  context, MedicationTrackerScreen(userEmail: userEmail)),
-            ),
-            const SizedBox(height: 16),
-
-            _ActionCard(
-              icon: Icons.emergency,
-              iconColor: Colors.red,
-              title: 'Emergency Access QR',
-              subtitle:
-                  'Permanent QR for first responders — no internet needed.',
-              onTap: () => _push(
-                  context, EmergencyQrScreen(userEmail: userEmail)),
-            ),
-            const SizedBox(height: 16),
-
-            _ActionCard(
-              icon: Icons.security,
-              iconColor: Colors.orange,
-              title: 'Security Audit Trail',
-              subtitle: 'Review who accessed your records and when.',
-              onTap: () =>
-                  _push(context, AuditLogScreen(userEmail: userEmail)),
-            ),
-          ],
-        ),
+              isPremium: false),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.grey),
+            title: const Text('Logout'),
+            onTap: () async {
+              await FirebaseAuth.instance.signOut();
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
+            },
+          ),
+        ],
       ),
     );
   }
 
-  void _push(BuildContext context, Widget screen) {
-    Navigator.push(
-        context, MaterialPageRoute(builder: (_) => screen));
+  Widget _drawerItem(BuildContext context, String currentTier,
+      {required IconData icon,
+      required Color color,
+      required String title,
+      required Widget screen,
+      required bool isPremium}) {
+    return ListTile(
+      leading: Icon(icon, color: color),
+      title: Text(title),
+      trailing: (isPremium && currentTier != 'personal')
+          ? const Icon(Icons.lock, size: 16, color: Colors.amber)
+          : null,
+      onTap: () => _handleNavigation(context, currentTier,
+          screen: screen, isPremium: isPremium, isDrawer: true),
+    );
   }
-
-  Widget _drawerItem(
-    BuildContext context, {
-    required IconData icon,
-    required Color color,
-    required String title,
-    required String subtitle,
-    required Widget screen,
-  }) =>
-      ListTile(
-        leading: Icon(icon, color: color),
-        title: Text(title),
-        subtitle: Text(subtitle),
-        onTap: () {
-          Navigator.pop(context);
-          Navigator.push(context,
-              MaterialPageRoute(builder: (_) => screen));
-        },
-      );
 }
 
 class _ActionCard extends StatelessWidget {
@@ -193,6 +364,7 @@ class _ActionCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool isPremium;
 
   const _ActionCard({
     required this.icon,
@@ -200,13 +372,13 @@ class _ActionCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.isPremium = false,
   });
 
   @override
   Widget build(BuildContext context) => Card(
         elevation: 4,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         child: ListTile(
           contentPadding: const EdgeInsets.all(16),
           leading: Container(
@@ -220,7 +392,9 @@ class _ActionCard extends StatelessWidget {
           title: Text(title,
               style: const TextStyle(fontWeight: FontWeight.bold)),
           subtitle: Text(subtitle),
-          trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+          trailing: isPremium
+              ? const Icon(Icons.lock, size: 20, color: Colors.amber)
+              : const Icon(Icons.arrow_forward_ios, size: 16),
           onTap: onTap,
         ),
       );
