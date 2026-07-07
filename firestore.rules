@@ -1,34 +1,70 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Patient Profiles: Users can only read/write their own profile
+
+    // ── Patient Profiles ──────────────────────────────────────────────────────
+    // Owner can read their own profile.
+    // Owner can create/update their profile BUT cannot set or change
+    // subscription_tier or subscription_updated — only the backend (Admin SDK)
+    // can write those fields, making the paywall tamper-proof.
     match /patients/{email} {
-      allow read, write: if request.auth != null && request.auth.token.email == email;
-      
-      // Medication Subcollection
+      allow read: if request.auth != null
+                  && request.auth.token.email == email;
+
+      allow create: if request.auth != null
+                    && request.auth.token.email == email
+                    && !request.resource.data.keys()
+                       .hasAny(['subscription_tier', 'subscription_updated']);
+
+      allow update: if request.auth != null
+                    && request.auth.token.email == email
+                    && !request.resource.data.diff(resource.data)
+                       .affectedKeys()
+                       .hasAny(['subscription_tier', 'subscription_updated']);
+
+      allow delete: if false;
+
+      // ── Medications subcollection ─────────────────────────────────────────
       match /medications/{medId} {
-        allow read, write: if request.auth != null && request.auth.token.email == email;
+        allow read, write: if request.auth != null
+                           && request.auth.token.email == email;
       }
-      
-      // NEW: Appointments Subcollection
+
+      // ── Emergency Profile subcollection ──────────────────────────────────
+      match /emergency_profile/{docId} {
+        allow read, write: if request.auth != null
+                           && request.auth.token.email == email;
+      }
+
+      // ── Appointments subcollection ────────────────────────────────────────
       match /appointments/{appId} {
-        allow read, write: if request.auth != null && request.auth.token.email == email;
+        allow read, write: if request.auth != null
+                           && request.auth.token.email == email;
       }
     }
-    
-    // Documents: Users can only see records tied to their email
+
+    // ── Documents ─────────────────────────────────────────────────────────────
+    // Owner can read their own documents and create new ones.
+    // Documents are immutable once written (no update or delete).
     match /documents/{docId} {
-      allow read: if request.auth != null && resource.data.patient_email == request.auth.token.email;
-      allow create: if request.auth != null && request.resource.data.patient_email == request.auth.token.email;
-      allow update, delete: if false; 
+      allow read:   if request.auth != null
+                    && resource.data.patient_email == request.auth.token.email;
+      allow create: if request.auth != null
+                    && request.resource.data.patient_email == request.auth.token.email;
+      allow update, delete: if false;
     }
-    
-    // Audit Logs: Users can only see their own logs. Immutable (no updates/deletes)
+
+    // ── Audit Logs ────────────────────────────────────────────────────────────
+    // Owner can read their own audit entries.
+    // Anyone authenticated can create an entry (backend writes on their behalf).
+    // Nobody can ever edit or delete an audit log entry (HIPAA immutability).
     match /audit_logs/{logId} {
-      allow read: if request.auth != null && resource.data.user == request.auth.token.email;
-      allow create: if request.auth != null && request.resource.data.user == request.auth.token.email;
-      allow update, delete: if false; 
+      allow read:   if request.auth != null
+                    && resource.data.user == request.auth.token.email;
+      allow create: if request.auth != null
+                    && request.resource.data.user == request.auth.token.email;
+      allow update, delete: if false;
     }
   }
 }

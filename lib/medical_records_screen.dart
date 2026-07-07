@@ -15,6 +15,7 @@ class MedicalRecordsScreen extends StatelessWidget {
   final String userEmail;
   const MedicalRecordsScreen({super.key, required this.userEmail});
 
+  // ── Paywall ────────────────────────────────────────────────────────────────
   void _showPaywall(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -38,10 +39,14 @@ class MedicalRecordsScreen extends StatelessWidget {
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
             const SizedBox(height: 32),
-            _benefitRow(Icons.health_and_safety, Colors.red, 'Offline Emergency Access QR'),
-            _benefitRow(Icons.calendar_month, Colors.indigo, 'Appointment Calendar & Reminders'),
-            _benefitRow(Icons.medication, Colors.teal, 'Unlimited Medication Tracking'),
-            _benefitRow(Icons.fingerprint, Colors.blue, 'Biometric App Lock'),
+            _benefitRow(Icons.health_and_safety, Colors.red,
+                'Offline Emergency Access QR'),
+            _benefitRow(Icons.calendar_month, Colors.indigo,
+                'Appointment Calendar & Reminders'),
+            _benefitRow(Icons.medication, Colors.teal,
+                'Unlimited Medication Tracking'),
+            _benefitRow(
+                Icons.fingerprint, Colors.blue, 'Biometric App Lock'),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
@@ -57,15 +62,20 @@ class MedicalRecordsScreen extends StatelessWidget {
                   Navigator.pop(ctx);
                   _launchStripeCheckout(context);
                 },
-                child: const Text('Subscribe for $9.99 / month',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                // FIX: escape $ so Dart doesn't treat it as interpolation
+                child: const Text(
+                  'Subscribe for \$9.99 / month',
+                  style: TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             const SizedBox(height: 16),
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Maybe Later', style: TextStyle(color: Colors.grey)),
-            )
+              child: const Text('Maybe Later',
+                  style: TextStyle(color: Colors.grey)),
+            ),
           ],
         ),
       ),
@@ -85,23 +95,25 @@ class MedicalRecordsScreen extends StatelessWidget {
           ),
           const SizedBox(width: 16),
           Expanded(
-              child: Text(text,
-                  style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w500))),
+            child: Text(text,
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w500)),
+          ),
         ],
       ),
     );
   }
 
+  // ── Stripe Checkout ────────────────────────────────────────────────────────
   Future<void> _launchStripeCheckout(BuildContext context) async {
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Preparing secure checkout...')),
     );
 
     try {
-      // NOTE: Using your production backend URL. If testing locally, switch to: 
-      // http://10.0.2.2:8000/create-checkout-session (for Android Emulator)
-      final url = Uri.parse('https://medicalapp-clean.onrender.com/create-checkout-session'); 
+      final url = Uri.parse(
+          'https://medicalapp-clean.onrender.com/create-checkout-session');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -109,52 +121,62 @@ class MedicalRecordsScreen extends StatelessWidget {
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        final data        = jsonDecode(response.body);
         final checkoutUrl = Uri.parse(data['url']);
-        
+
         if (await canLaunchUrl(checkoutUrl)) {
-          await launchUrl(checkoutUrl, mode: LaunchMode.externalApplication);
+          await launchUrl(checkoutUrl,
+              mode: LaunchMode.externalApplication);
         } else {
           throw 'Could not launch browser.';
         }
       } else {
-        throw 'Failed to initialize checkout. Server responded with ${response.statusCode}.';
+        throw 'Server responded with ${response.statusCode}.';
       }
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Checkout Error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Checkout Error: $e'),
+              backgroundColor: Colors.red),
         );
       }
     }
   }
 
-  void _handleNavigation(BuildContext context, String currentTier,
-      {required Widget screen, required bool isPremium, bool isDrawer = false}) {
-    if (isDrawer) Navigator.pop(context); // Close drawer first if applicable
-
+  // ── Navigation helper ──────────────────────────────────────────────────────
+  void _handleNavigation(
+    BuildContext context,
+    String currentTier, {
+    required Widget screen,
+    required bool isPremium,
+    bool isDrawer = false,
+  }) {
+    if (isDrawer) Navigator.pop(context);
     if (isPremium && currentTier != 'personal') {
       _showPaywall(context);
     } else {
-      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+      Navigator.push(
+          context, MaterialPageRoute(builder: (_) => screen));
     }
   }
 
+  // ── Build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final displayName = userEmail.split('@').first;
-    final greeting = displayName.isNotEmpty
+    final greeting    = displayName.isNotEmpty
         ? displayName[0].toUpperCase() + displayName.substring(1)
         : 'there';
 
     return StreamBuilder<DocumentSnapshot>(
-      // Listen to the user's profile to instantly unlock UI when Stripe webhook fires
+      // Real-time listener — UI unlocks the instant Stripe webhook updates Firestore
       stream: FirebaseFirestore.instance
           .collection('patients')
           .doc(userEmail)
           .snapshots(),
       builder: (context, snapshot) {
-        String tier = 'free'; // Default to free
+        String tier = 'free';
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>?;
           tier = data?['subscription_tier'] ?? 'free';
@@ -179,7 +201,7 @@ class MedicalRecordsScreen extends StatelessWidget {
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.2)),
                   ),
-                )
+                ),
             ],
           ),
           drawer: _buildDrawer(context, greeting, tier),
@@ -193,10 +215,11 @@ class MedicalRecordsScreen extends StatelessWidget {
                         fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
                 Text('Your medical data is secured by Google Cloud.',
-                    style: TextStyle(fontSize: 15, color: Colors.grey[600])),
+                    style:
+                        TextStyle(fontSize: 15, color: Colors.grey[600])),
                 const SizedBox(height: 32),
 
-                // FREE Features
+                // ── Free features ──────────────────────────────────────────
                 _ActionCard(
                   icon: Icons.qr_code_scanner,
                   iconColor: Colors.blue,
@@ -214,12 +237,13 @@ class MedicalRecordsScreen extends StatelessWidget {
                   title: 'Medication Tracker',
                   subtitle: 'Manage medications and set daily reminders.',
                   onTap: () => _handleNavigation(context, tier,
-                      screen: MedicationTrackerScreen(userEmail: userEmail),
-                      isPremium: false), // Soft gate: allowed, but limits inside
+                      screen:
+                          MedicationTrackerScreen(userEmail: userEmail),
+                      isPremium: false),
                 ),
                 const SizedBox(height: 16),
 
-                // PREMIUM Features
+                // ── Premium features ───────────────────────────────────────
                 _ActionCard(
                   icon: Icons.calendar_month,
                   iconColor: Colors.indigo,
@@ -227,7 +251,8 @@ class MedicalRecordsScreen extends StatelessWidget {
                   subtitle: 'Manage upcoming visits and schedules.',
                   isPremium: tier != 'personal',
                   onTap: () => _handleNavigation(context, tier,
-                      screen: AppointmentCalendarScreen(userEmail: userEmail),
+                      screen: AppointmentCalendarScreen(
+                          userEmail: userEmail),
                       isPremium: true),
                 ),
                 const SizedBox(height: 16),
@@ -253,6 +278,12 @@ class MedicalRecordsScreen extends StatelessWidget {
                       screen: AuditLogScreen(userEmail: userEmail),
                       isPremium: false),
                 ),
+
+                // ── Upgrade banner for free users ──────────────────────────
+                if (tier != 'personal') ...[
+                  const SizedBox(height: 24),
+                  _UpgradeBanner(onTap: () => _showPaywall(context)),
+                ],
               ],
             ),
           ),
@@ -261,7 +292,9 @@ class MedicalRecordsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildDrawer(BuildContext context, String greeting, String tier) {
+  // ── Drawer ─────────────────────────────────────────────────────────────────
+  Widget _buildDrawer(
+      BuildContext context, String greeting, String tier) {
     return Drawer(
       child: ListView(
         padding: EdgeInsets.zero,
@@ -274,18 +307,23 @@ class MedicalRecordsScreen extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.account_circle, size: 50, color: Colors.white),
+                    const Icon(Icons.account_circle,
+                        size: 50, color: Colors.white),
                     const Spacer(),
                     if (tier == 'personal')
-                      const Icon(Icons.workspace_premium, color: Colors.amber, size: 28),
+                      const Icon(Icons.workspace_premium,
+                          color: Colors.amber, size: 28),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(greeting,
                     style: const TextStyle(
-                        color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
                 Text(userEmail,
-                    style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 13)),
                 const SizedBox(height: 10),
               ],
             ),
@@ -321,6 +359,17 @@ class MedicalRecordsScreen extends StatelessWidget {
               screen: AuditLogScreen(userEmail: userEmail),
               isPremium: false),
           const Divider(),
+          if (tier != 'personal')
+            ListTile(
+              leading:
+                  Icon(Icons.workspace_premium, color: Colors.amber[700]),
+              title: const Text('Upgrade to Pro',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              onTap: () {
+                Navigator.pop(context);
+                _showPaywall(context);
+              },
+            ),
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.grey),
             title: const Text('Logout'),
@@ -329,7 +378,8 @@ class MedicalRecordsScreen extends StatelessWidget {
               if (context.mounted) {
                 Navigator.pushAndRemoveUntil(
                   context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  MaterialPageRoute(
+                      builder: (_) => const LoginScreen()),
                   (route) => false,
                 );
               }
@@ -340,12 +390,15 @@ class MedicalRecordsScreen extends StatelessWidget {
     );
   }
 
-  Widget _drawerItem(BuildContext context, String currentTier,
-      {required IconData icon,
-      required Color color,
-      required String title,
-      required Widget screen,
-      required bool isPremium}) {
+  Widget _drawerItem(
+    BuildContext context,
+    String currentTier, {
+    required IconData icon,
+    required Color color,
+    required String title,
+    required Widget screen,
+    required bool isPremium,
+  }) {
     return ListTile(
       leading: Icon(icon, color: color),
       title: Text(title),
@@ -358,6 +411,56 @@ class MedicalRecordsScreen extends StatelessWidget {
   }
 }
 
+// ── Upgrade banner widget ──────────────────────────────────────────────────────
+class _UpgradeBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _UpgradeBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.blue[700]!, Colors.blue[900]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.workspace_premium,
+                color: Colors.amber, size: 32),
+            const SizedBox(width: 16),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Unlock MediRecords Pro',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
+                  SizedBox(height: 4),
+                  Text('Emergency QR, Appointments & more',
+                      style:
+                          TextStyle(color: Colors.white70, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios,
+                color: Colors.white70, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Action card widget ─────────────────────────────────────────────────────────
 class _ActionCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -378,7 +481,8 @@ class _ActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
         elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
         child: ListTile(
           contentPadding: const EdgeInsets.all(16),
           leading: Container(

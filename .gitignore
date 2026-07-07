@@ -1,25 +1,32 @@
-# Flutter/Dart
+# Flutter/Dart — generated files, never commit these
 .dart_tool/
 build/
+pubspec.lock
+
+# Platform folders — KEEP android/ in git (needed for Render + Play Store)
+# android/   ← REMOVED: AndroidManifest.xml must be tracked
 ios/
-android/
 macos/
 linux/
 windows/
-web/
-*.apk
-*.aab
 
 # IDE
 .idea/
 .vscode/
 
 # Large binaries
+*.apk
+*.aab
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.pdf
 *.zip
-serviceAccountKey.json 
+
+# Secrets — NEVER commit these
+serviceAccountKey.json
 lib/firebase_options.dart
+.env
+*.env
+__pycache__/
