@@ -62,7 +62,6 @@ class MedicalRecordsScreen extends StatelessWidget {
                   Navigator.pop(ctx);
                   _launchStripeCheckout(context);
                 },
-                // FIX: escape $ so Dart doesn't treat it as interpolation
                 child: const Text(
                   'Subscribe for \$9.99 / month',
                   style: TextStyle(
@@ -124,9 +123,15 @@ class MedicalRecordsScreen extends StatelessWidget {
         final data        = jsonDecode(response.body);
         final checkoutUrl = Uri.parse(data['url']);
 
+        // PRINT THE LINK TO THE TERMINAL
+        debugPrint('\n========================================================');
+        debugPrint('💳 STRIPE CHECKOUT LINK (CLICK HERE):');
+        debugPrint(checkoutUrl.toString());
+        debugPrint('========================================================\n');
+
         if (await canLaunchUrl(checkoutUrl)) {
           await launchUrl(checkoutUrl,
-              mode: LaunchMode.externalApplication);
+              mode: LaunchMode.inAppBrowserView);
         } else {
           throw 'Could not launch browser.';
         }

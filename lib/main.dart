@@ -4,7 +4,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'login_screen.dart';
 import 'services/biometric_service.dart';
 
-// 1. Background message handler (Must be a top-level function)
+// 1. Background message handler
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp();
   debugPrint("Handling a background message: ${message.messageId}");
@@ -13,7 +13,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 2. Initialize Firebase with a try-catch so it NEVER blocks the app from loading
+  // 2. Initialize Firebase
   try {
     await Firebase.initializeApp(
       options: const FirebaseOptions(
@@ -47,16 +47,15 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   // We start locked so the app requires auth on cold boot.
   bool _isLocked = true;
+  bool _isAuthenticating = false; // Prevents the infinite loop trap!
   late final AppLifecycleListener _listener;
 
   @override
   void initState() {
     super.initState();
-    // Initialize the lifecycle listener
     _listener = AppLifecycleListener(
       onStateChange: _onStateChanged,
     );
-    // Trigger initial auth on boot
     _authenticate();
   }
 
@@ -68,20 +67,36 @@ class _MyAppState extends State<MyApp> {
 
   // This fires whenever the app goes to the background or comes back
   void _onStateChanged(AppLifecycleState state) {
+    // 1. SHIELD: Ignore lifecycle changes if we are currently authenticating
+    if (_isAuthenticating) return;
+
     if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       // App is hidden -> lock it
       setState(() => _isLocked = true);
     } else if (state == AppLifecycleState.resumed) {
-      // App is back on screen -> prompt for auth
-      _authenticate();
+      // 2. CHECK: Only prompt for auth if the app is actually locked!
+      if (_isLocked) {
+        _authenticate();
+      }
     }
   }
 
   Future<void> _authenticate() async {
+    if (_isAuthenticating) return; 
+    
+    _isAuthenticating = true; // Raise the shield (no setState needed for this flag)
+    
     final authenticated = await BiometricService.authenticate();
+    
     if (authenticated) {
       setState(() => _isLocked = false);
     }
+
+    // 3. BUFFER: The Android lifecycle takes a split second to fire the "resumed" 
+    // event after the native dialog closes. We wait 200ms before dropping the shield 
+    // to completely kill the race condition loop.
+    await Future.delayed(const Duration(milliseconds: 200));
+    _isAuthenticating = false; // Drop the shield
   }
 
   @override
@@ -93,7 +108,6 @@ class _MyAppState extends State<MyApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      // If locked, show the lock screen; otherwise, show the app.
       home: _isLocked ? _buildLockScreen() : const LoginScreen(),
     );
   }

@@ -1,4 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Required for local_auth biometric prompt -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
+
     <application
         android:label="medical_app"
         android:name="${applicationName}"
@@ -25,11 +30,6 @@
             android:value="2"/>
     </application>
 
-    <!--
-        Required for url_launcher to open https:// URLs in the device browser.
-        Without this, launchUrl() fails silently on Android 11+ (API 30+).
-        Needed for Stripe Checkout to open in the external browser.
-    -->
     <queries>
         <!-- url_launcher: open Stripe checkout (https) in browser -->
         <intent>
@@ -47,4 +47,5 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
+
 </manifest>
