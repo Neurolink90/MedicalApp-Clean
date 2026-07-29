@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Daysman API")
 
-# ── Stripe Setup ──────────────────────────────────────────────────────────────
+# ── Stripe ────────────────────────────────────────────────────────────────────
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 # ── Firebase Admin Init ───────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ try:
             firebase_admin.initialize_app(cred, {
                 "storageBucket": "medirecords-pro.firebasestorage.app"
             })
-            logger.info("✅ Firebase Admin initialized from Base64 env var")
+            logger.info("✅ Firebase initialized from Base64 env var")
         elif os.path.exists(key_path):
             cred = credentials.Certificate(key_path)
             firebase_admin.initialize_app(cred, {
@@ -41,7 +41,7 @@ try:
             })
             logger.info(f"✅ Firebase initialized from {key_path}")
         else:
-            logger.warning("⚠️ No Firebase credentials found. DB will be offline.")
+            logger.warning("⚠️ No Firebase credentials found.")
 except Exception as e:
     logger.error(f"❌ Firebase Init Error: {e}")
 
@@ -58,6 +58,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://daysman.health",
+        "https://api.daysman.health",
         "http://localhost:8080",
         "http://localhost:3000",
     ],
@@ -69,13 +70,8 @@ app.add_middleware(
 # ── Stripe Checkout ───────────────────────────────────────────────────────────
 @app.post("/create-checkout-session")
 async def create_checkout_session(data: dict = Body(...)):
-    """
-    Creates a Stripe Checkout session for the Daysman Personal plan.
-    Flutter calls this when user taps Subscribe on the paywall.
-    Returns a URL that Flutter opens in the device browser.
-    """
     if not stripe.api_key:
-        raise HTTPException(status_code=500, detail="Stripe not configured on server")
+        raise HTTPException(status_code=500, detail="Stripe not configured")
 
     email = data.get("email", "")
     if not email:
@@ -95,7 +91,7 @@ async def create_checkout_session(data: dict = Body(...)):
                             "emergency QR, biometric lock"
                         ),
                     },
-                    "unit_amount": 999,  # $9.99 in cents
+                    "unit_amount": 999,
                     "recurring": {"interval": "month"},
                 },
                 "quantity": 1,
@@ -104,10 +100,10 @@ async def create_checkout_session(data: dict = Body(...)):
             customer_email=email,
             metadata={"patient_email": email},
             success_url=(
-                "https://daysman-api.onrender.com/payment-success"
+                "https://api.daysman.health/payment-success"
                 "?session_id={CHECKOUT_SESSION_ID}"
             ),
-            cancel_url="https://daysman-api.onrender.com/payment-cancelled",
+            cancel_url="https://api.daysman.health/payment-cancelled",
         )
         logger.info(f"✅ Stripe session created for {email}")
         return {"url": session.url}
@@ -122,10 +118,6 @@ async def create_checkout_session(data: dict = Body(...)):
 
 @app.post("/stripe-webhook")
 async def stripe_webhook(request: Request):
-    """
-    Receives Stripe events after payment completes.
-    Verifies webhook signature then updates subscription_tier in Firestore.
-    """
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
     payload        = await request.body()
     sig_header     = request.headers.get("stripe-signature")
@@ -135,16 +127,14 @@ async def stripe_webhook(request: Request):
             payload, sig_header, webhook_secret
         )
     except stripe.error.SignatureVerificationError:
-        logger.error("❌ Stripe webhook signature verification failed")
+        logger.error("❌ Stripe webhook signature failed")
         raise HTTPException(status_code=400, detail="Invalid signature")
     except Exception as e:
-        logger.error(f"❌ Webhook parse error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
     if event["type"] == "checkout.session.completed":
         session       = event["data"]["object"]
         patient_email = session.get("metadata", {}).get("patient_email")
-
         if patient_email and db:
             db.collection("patients").document(patient_email).set(
                 {
@@ -171,9 +161,7 @@ async def stripe_webhook(request: Request):
                 patient_email = customer.get("email")
                 if patient_email:
                     db.collection("patients").document(patient_email).set(
-                        {"subscription_tier": "free"},
-                        merge=True,
-                    )
+                        {"subscription_tier": "free"}, merge=True)
                     logger.info(f"⬇️ Subscription downgraded for {patient_email}")
             except Exception as e:
                 logger.error(f"❌ Downgrade error: {e}")
@@ -183,23 +171,18 @@ async def stripe_webhook(request: Request):
 
 @app.get("/payment-success")
 async def payment_success(session_id: str = ""):
-    """Landing page after successful Stripe checkout."""
     return {
-        "message": (
-            "Payment successful! Open the Daysman app "
-            "to access your subscription."
-        ),
+        "message": "Payment successful! Open the Daysman app to access your subscription.",
         "session_id": session_id,
     }
 
 
 @app.get("/payment-cancelled")
 async def payment_cancelled():
-    """Landing page when user cancels Stripe checkout."""
     return {"message": "Payment cancelled. Return to the Daysman app to try again."}
 
 
-# ── FCM Token Registration ────────────────────────────────────────────────────
+# ── FCM Token ─────────────────────────────────────────────────────────────────
 @app.post("/register-token")
 @app.post("/update-fcm-token")
 async def register_token(request: Request):
@@ -233,7 +216,6 @@ async def register_token(request: Request):
 async def get_profile(email: str):
     if not db:
         raise HTTPException(status_code=500, detail="Database disconnected")
-
     doc = db.collection("patients").document(email).get()
     if doc.exists:
         data = doc.to_dict()
@@ -247,7 +229,6 @@ async def get_profile(email: str):
 async def get_all_patients():
     if not db:
         raise HTTPException(status_code=500, detail="Database disconnected")
-
     docs = db.collection("patients").stream()
     results = []
     for d in docs:
@@ -260,7 +241,7 @@ async def get_all_patients():
 
 @app.get("/appointments")
 async def get_appointments(email: str = ""):
-    # Lightweight UptimeRobot ping target
+    # UptimeRobot ping target — keep lightweight
     return [{"title": "Annual Checkup", "date": "2026-06-15", "time": "10:00 AM"}]
 
 
@@ -269,18 +250,13 @@ async def get_appointments(email: str = ""):
 async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
     if not db or not bucket:
         raise HTTPException(status_code=500, detail="Firebase disconnected")
-
     try:
         blob_path = f"documents/{email}/{file.filename}"
         blob      = bucket.blob(blob_path)
         file_data = await file.read()
         blob.upload_from_string(file_data, content_type=file.content_type)
-
         signed_url = blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(minutes=5),
-            method="GET",
-        )
+            version="v4", expiration=timedelta(minutes=5), method="GET")
 
         db.collection("documents").add({
             "patient_email": email,
@@ -289,7 +265,6 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
             "upload_date":   datetime.now().strftime("%Y-%m-%d"),
             "storage_path":  blob_path,
         })
-
         db.collection("audit_logs").add({
             "timestamp": firestore.SERVER_TIMESTAMP,
             "user":      email,
@@ -314,7 +289,6 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
                     logger.warning(f"⚠️ FCM send failed: {fcm_err}")
 
         return {"success": True, "signed_url": signed_url}
-
     except Exception as e:
         logger.error(f"❌ Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -325,7 +299,6 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
 async def get_documents(email: str):
     if not db:
         raise HTTPException(status_code=500, detail="Database disconnected")
-
     docs = db.collection("documents").where(
         "patient_email", "==", email).stream()
     return [d.to_dict() for d in docs]
@@ -336,16 +309,11 @@ async def get_documents(email: str):
 async def share_document(email: str, filename: str):
     if not db or not bucket:
         raise HTTPException(status_code=500, detail="Firebase disconnected")
-
     try:
         blob_path  = f"documents/{email}/{filename}"
         blob       = bucket.blob(blob_path)
         signed_url = blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(minutes=5),
-            method="GET",
-        )
-
+            version="v4", expiration=timedelta(minutes=5), method="GET")
         db.collection("audit_logs").add({
             "timestamp": firestore.SERVER_TIMESTAMP,
             "user":      email,
@@ -353,7 +321,6 @@ async def share_document(email: str, filename: str):
             "file":      filename,
             "details":   "5-minute signed URL generated for QR share",
         })
-
         return {"signed_url": signed_url}
     except Exception as e:
         logger.error(f"❌ Share error: {e}")
@@ -365,7 +332,6 @@ async def share_document(email: str, filename: str):
 async def get_audit_logs(email: str):
     if not db:
         raise HTTPException(status_code=500, detail="Database disconnected")
-
     try:
         query = (
             db.collection("audit_logs")
@@ -377,8 +343,7 @@ async def get_audit_logs(email: str):
         for d in query:
             data = d.to_dict()
             if data.get("timestamp"):
-                data["timestamp"] = data["timestamp"].strftime(
-                    "%Y-%m-%d %H:%M:%S")
+                data["timestamp"] = data["timestamp"].strftime("%Y-%m-%d %H:%M:%S")
             results.append(data)
         return results
     except Exception as e:
@@ -392,6 +357,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
-# ── REMOVED (do not restore) ──────────────────────────────────────────────────
-# /debug/db-check    — exposed raw Firestore patient record
-# /debug/seed-zach   — created hardcoded test user with known password
+# ── REMOVED — do not restore ──────────────────────────────────────────────────
+# /debug/db-check    — exposed raw Firestore patient data
+# /debug/seed-zach   — hardcoded test credentials
