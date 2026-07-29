@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+iimport 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:http/http.dart' as http;
@@ -14,6 +14,9 @@ import 'login_screen.dart';
 class MedicalRecordsScreen extends StatelessWidget {
   final String userEmail;
   const MedicalRecordsScreen({super.key, required this.userEmail});
+
+  // ── Backend URL ────────────────────────────────────────────────────────────
+  static const String _apiBase = 'https://daysman-api.onrender.com';
 
   // ── Paywall ────────────────────────────────────────────────────────────────
   void _showPaywall(BuildContext context) {
@@ -35,7 +38,7 @@ class MedicalRecordsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              'Unlock the full power of MediRecords Pro.',
+              'Unlock the full power of Daysman.',
               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
             ),
             const SizedBox(height: 32),
@@ -111,8 +114,7 @@ class MedicalRecordsScreen extends StatelessWidget {
     );
 
     try {
-      final url = Uri.parse(
-          'https://medicalapp-clean.onrender.com/create-checkout-session');
+      final url = Uri.parse('$_apiBase/create-checkout-session');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -123,15 +125,9 @@ class MedicalRecordsScreen extends StatelessWidget {
         final data        = jsonDecode(response.body);
         final checkoutUrl = Uri.parse(data['url']);
 
-        // PRINT THE LINK TO THE TERMINAL
-        debugPrint('\n========================================================');
-        debugPrint('💳 STRIPE CHECKOUT LINK (CLICK HERE):');
-        debugPrint(checkoutUrl.toString());
-        debugPrint('========================================================\n');
-
         if (await canLaunchUrl(checkoutUrl)) {
           await launchUrl(checkoutUrl,
-              mode: LaunchMode.inAppBrowserView);
+              mode: LaunchMode.externalApplication);
         } else {
           throw 'Could not launch browser.';
         }
@@ -175,7 +171,6 @@ class MedicalRecordsScreen extends StatelessWidget {
         : 'there';
 
     return StreamBuilder<DocumentSnapshot>(
-      // Real-time listener — UI unlocks the instant Stripe webhook updates Firestore
       stream: FirebaseFirestore.instance
           .collection('patients')
           .doc(userEmail)
@@ -189,7 +184,7 @@ class MedicalRecordsScreen extends StatelessWidget {
 
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Patient Dashboard',
+            title: const Text('Daysman',
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
             backgroundColor: Colors.blue[700],
@@ -219,7 +214,7 @@ class MedicalRecordsScreen extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text('Your medical data is secured by Google Cloud.',
+                Text('Your health data is secured by Google Cloud.',
                     style:
                         TextStyle(fontSize: 15, color: Colors.grey[600])),
                 const SizedBox(height: 32),
@@ -242,8 +237,7 @@ class MedicalRecordsScreen extends StatelessWidget {
                   title: 'Medication Tracker',
                   subtitle: 'Manage medications and set daily reminders.',
                   onTap: () => _handleNavigation(context, tier,
-                      screen:
-                          MedicationTrackerScreen(userEmail: userEmail),
+                      screen: MedicationTrackerScreen(userEmail: userEmail),
                       isPremium: false),
                 ),
                 const SizedBox(height: 16),
@@ -256,8 +250,7 @@ class MedicalRecordsScreen extends StatelessWidget {
                   subtitle: 'Manage upcoming visits and schedules.',
                   isPremium: tier != 'personal',
                   onTap: () => _handleNavigation(context, tier,
-                      screen: AppointmentCalendarScreen(
-                          userEmail: userEmail),
+                      screen: AppointmentCalendarScreen(userEmail: userEmail),
                       isPremium: true),
                 ),
                 const SizedBox(height: 16),
@@ -366,8 +359,7 @@ class MedicalRecordsScreen extends StatelessWidget {
           const Divider(),
           if (tier != 'personal')
             ListTile(
-              leading:
-                  Icon(Icons.workspace_premium, color: Colors.amber[700]),
+              leading: Icon(Icons.workspace_premium, color: Colors.amber[700]),
               title: const Text('Upgrade to Pro',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               onTap: () {
@@ -383,8 +375,7 @@ class MedicalRecordsScreen extends StatelessWidget {
               if (context.mounted) {
                 Navigator.pushAndRemoveUntil(
                   context,
-                  MaterialPageRoute(
-                      builder: (_) => const LoginScreen()),
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
                   (route) => false,
                 );
               }
@@ -416,7 +407,7 @@ class MedicalRecordsScreen extends StatelessWidget {
   }
 }
 
-// ── Upgrade banner widget ──────────────────────────────────────────────────────
+// ── Upgrade banner ─────────────────────────────────────────────────────────────
 class _UpgradeBanner extends StatelessWidget {
   final VoidCallback onTap;
   const _UpgradeBanner({required this.onTap});
@@ -444,15 +435,14 @@ class _UpgradeBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Unlock MediRecords Pro',
+                  Text('Unlock Daysman Personal',
                       style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 15)),
                   SizedBox(height: 4),
                   Text('Emergency QR, Appointments & more',
-                      style:
-                          TextStyle(color: Colors.white70, fontSize: 12)),
+                      style: TextStyle(color: Colors.white70, fontSize: 12)),
                 ],
               ),
             ),
@@ -465,7 +455,7 @@ class _UpgradeBanner extends StatelessWidget {
   }
 }
 
-// ── Action card widget ─────────────────────────────────────────────────────────
+// ── Action card ────────────────────────────────────────────────────────────────
 class _ActionCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;

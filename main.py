@@ -15,17 +15,16 @@ from firebase_admin import credentials, messaging, firestore, storage, auth
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="MediRecords Pro API")
+app = FastAPI(title="Daysman API")
 
 # ── Stripe Setup ──────────────────────────────────────────────────────────────
-# Set STRIPE_SECRET_KEY in Render environment variables — never hardcode
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 # ── Firebase Admin Init ───────────────────────────────────────────────────────
 try:
     if not firebase_admin._apps:
         firebase_b64 = os.getenv("FIREBASE_CONFIG_JSON")
-        key_path = "/etc/secrets/serviceAccountKey.json"
+        key_path     = "/etc/secrets/serviceAccountKey.json"
 
         if firebase_b64:
             decoded   = base64.b64decode(firebase_b64.strip())
@@ -36,18 +35,16 @@ try:
             })
             logger.info("✅ Firebase Admin initialized from Base64 env var")
         elif os.path.exists(key_path):
-            # Local development fallback only — gitignored, never in production
             cred = credentials.Certificate(key_path)
             firebase_admin.initialize_app(cred, {
                 "storageBucket": "medirecords-pro.firebasestorage.app"
             })
-            logger.info(f"✅ Firebase initialized from local {key_path}")
+            logger.info(f"✅ Firebase initialized from {key_path}")
         else:
             logger.warning("⚠️ No Firebase credentials found. DB will be offline.")
 except Exception as e:
     logger.error(f"❌ Firebase Init Error: {e}")
 
-# Safely initialize clients so server starts even if Firebase is offline
 try:
     db     = firestore.client()
     bucket = storage.bucket()
@@ -57,12 +54,10 @@ except Exception as e:
     logger.warning(f"⚠️ Firebase clients offline: {e}")
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# No wildcard — wildcard + allow_credentials is rejected by browsers
-# and is insecure for a medical app
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://neurolink90.github.io",
+        "https://daysman.health",
         "http://localhost:8080",
         "http://localhost:3000",
     ],
@@ -75,7 +70,7 @@ app.add_middleware(
 @app.post("/create-checkout-session")
 async def create_checkout_session(data: dict = Body(...)):
     """
-    Creates a Stripe Checkout session for the Personal subscription.
+    Creates a Stripe Checkout session for the Daysman Personal plan.
     Flutter calls this when user taps Subscribe on the paywall.
     Returns a URL that Flutter opens in the device browser.
     """
@@ -93,10 +88,11 @@ async def create_checkout_session(data: dict = Body(...)):
                 "price_data": {
                     "currency": "usd",
                     "product_data": {
-                        "name": "MediRecords Pro — Personal",
+                        "name": "Daysman — Personal Plan",
                         "description": (
-                            "Unlimited records, QR sharing, medication tracker, "
-                            "appointment calendar, emergency QR, biometric lock"
+                            "Unlimited health records, QR sharing, "
+                            "medication tracker, appointment calendar, "
+                            "emergency QR, biometric lock"
                         ),
                     },
                     "unit_amount": 999,  # $9.99 in cents
@@ -108,10 +104,10 @@ async def create_checkout_session(data: dict = Body(...)):
             customer_email=email,
             metadata={"patient_email": email},
             success_url=(
-                "https://medicalapp-clean.onrender.com/payment-success"
+                "https://daysman-api.onrender.com/payment-success"
                 "?session_id={CHECKOUT_SESSION_ID}"
             ),
-            cancel_url="https://medicalapp-clean.onrender.com/payment-cancelled",
+            cancel_url="https://daysman-api.onrender.com/payment-cancelled",
         )
         logger.info(f"✅ Stripe session created for {email}")
         return {"url": session.url}
@@ -129,7 +125,6 @@ async def stripe_webhook(request: Request):
     """
     Receives Stripe events after payment completes.
     Verifies webhook signature then updates subscription_tier in Firestore.
-    Set STRIPE_WEBHOOK_SECRET in Render environment variables.
     """
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
     payload        = await request.body()
@@ -163,7 +158,7 @@ async def stripe_webhook(request: Request):
                 "user":      patient_email,
                 "action":    "SUBSCRIPTION_UPGRADED",
                 "file":      "",
-                "details":   "Upgraded to Personal tier via Stripe",
+                "details":   "Upgraded to Daysman Personal via Stripe",
             })
             logger.info(f"✅ Subscription activated for {patient_email}")
 
@@ -188,10 +183,10 @@ async def stripe_webhook(request: Request):
 
 @app.get("/payment-success")
 async def payment_success(session_id: str = ""):
-    """User-facing landing page after successful Stripe checkout."""
+    """Landing page after successful Stripe checkout."""
     return {
         "message": (
-            "Payment successful! Open the MediRecords Pro app "
+            "Payment successful! Open the Daysman app "
             "to access your subscription."
         ),
         "session_id": session_id,
@@ -200,8 +195,8 @@ async def payment_success(session_id: str = ""):
 
 @app.get("/payment-cancelled")
 async def payment_cancelled():
-    """User-facing landing page when user cancels Stripe checkout."""
-    return {"message": "Payment cancelled. Return to the app to try again."}
+    """Landing page when user cancels Stripe checkout."""
+    return {"message": "Payment cancelled. Return to the Daysman app to try again."}
 
 
 # ── FCM Token Registration ────────────────────────────────────────────────────
@@ -231,6 +226,7 @@ async def register_token(request: Request):
     logger.info(f"🚀 FCM token saved for {user_id}")
     return {"status": "success"}
 
+
 # ── Patient Profile ───────────────────────────────────────────────────────────
 @app.get("/patients/{email}")
 @app.get("/profile")
@@ -241,10 +237,11 @@ async def get_profile(email: str):
     doc = db.collection("patients").document(email).get()
     if doc.exists:
         data = doc.to_dict()
-        data.pop("password",   None)
-        data.pop("fcm_token",  None)
+        data.pop("password",  None)
+        data.pop("fcm_token", None)
         return data
     return {"name": "New User", "email": email, "status": "Stable"}
+
 
 @app.get("/patients")
 async def get_all_patients():
@@ -260,10 +257,12 @@ async def get_all_patients():
         results.append(data)
     return results
 
+
 @app.get("/appointments")
 async def get_appointments(email: str = ""):
-    # Lightweight UptimeRobot ping target — returns immediately
+    # Lightweight UptimeRobot ping target
     return [{"title": "Annual Checkup", "date": "2026-06-15", "time": "10:00 AM"}]
+
 
 # ── Document Upload ───────────────────────────────────────────────────────────
 @app.post("/documents/upload")
@@ -320,6 +319,7 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
         logger.error(f"❌ Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ── Document List ─────────────────────────────────────────────────────────────
 @app.get("/documents")
 async def get_documents(email: str):
@@ -329,6 +329,7 @@ async def get_documents(email: str):
     docs = db.collection("documents").where(
         "patient_email", "==", email).stream()
     return [d.to_dict() for d in docs]
+
 
 # ── QR Share ──────────────────────────────────────────────────────────────────
 @app.get("/documents/share")
@@ -358,6 +359,7 @@ async def share_document(email: str, filename: str):
         logger.error(f"❌ Share error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ── Audit Logs ────────────────────────────────────────────────────────────────
 @app.get("/audit-logs")
 async def get_audit_logs(email: str):
@@ -382,6 +384,7 @@ async def get_audit_logs(email: str):
     except Exception as e:
         logger.error(f"❌ Audit log error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ── Entrypoint ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
