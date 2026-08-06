@@ -313,7 +313,7 @@ class _MedicationTrackerScreenState
                 Switch(
                   value: med.isActive,
                   onChanged: (_) => _toggleActive(med),
-                  activeColor: Colors.teal[700],
+                  activeThumbColor: Colors.teal[700],
                 ),
               ],
             ),
@@ -424,7 +424,7 @@ class _MedicationTrackerScreenState
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: frequency,
+                  initialValue: frequency,
                   decoration: const InputDecoration(
                     labelText: 'Frequency',
                     border: OutlineInputBorder(),

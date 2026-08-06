@@ -79,7 +79,7 @@ class _AppointmentCalendarScreenState extends State<AppointmentCalendarScreen> {
     await _appointmentsRef.doc(app.id).delete();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Appointment canceled'), backgroundColor: Colors.orange),
+        const SnackBar(content: Text('Appointment canceled'), backgroundColor: Colors.orange),
       );
     }
   }

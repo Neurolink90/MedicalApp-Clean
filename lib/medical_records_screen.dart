@@ -16,7 +16,7 @@ class MedicalRecordsScreen extends StatelessWidget {
   const MedicalRecordsScreen({super.key, required this.userEmail});
 
   // ── Backend URL ────────────────────────────────────────────────────────────
-  static const String _apiBase = 'https://api.daysman.health';
+  static const String _apiBase = 'https://daysman-api.onrender.com';
 
   // ── Paywall ────────────────────────────────────────────────────────────────
   void _showPaywall(BuildContext context) {
