@@ -101,8 +101,10 @@ class _LightningCheckoutScreenState extends State<LightningCheckoutScreen> {
                           ),
                           const SizedBox(height: 24),
                           TextButton(
-                            onPressed: () =>
-                                launchUrl(Uri.parse('lightning:$lnInvoice')),
+                            onPressed: () => launchUrl(
+                              Uri.parse('lightning:$lnInvoice'),
+                              mode: LaunchMode.externalApplication,
+                            ),
                             child: const Text('Open in Lightning wallet'),
                           ),
                           const SizedBox(height: 16),
