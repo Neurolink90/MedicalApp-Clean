@@ -9,11 +9,16 @@ import 'screens/audit_log_screen.dart';
 import 'screens/medication_tracker_screen.dart';
 import 'screens/emergency_qr_screen.dart';
 import 'screens/appointment_calendar_screen.dart';
+import 'screens/lightning_checkout_screen.dart';
 import 'login_screen.dart';
 
 class MedicalRecordsScreen extends StatelessWidget {
   final String userEmail;
   const MedicalRecordsScreen({super.key, required this.userEmail});
+
+  // ── Brand color ────────────────────────────────────────────────────────────
+  static const Color _daysmanTeal = Color(0xFF2C5F6E);
+  static const Color _daysmanTealDark = Color(0xFF1B3C46);
 
   // ── Backend URL ────────────────────────────────────────────────────────────
   static const String _apiBase = 'https://daysman-api.onrender.com';
@@ -55,7 +60,7 @@ class MedicalRecordsScreen extends StatelessWidget {
               width: double.infinity,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue[700],
+                  backgroundColor: _daysmanTeal,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -69,6 +74,29 @@ class MedicalRecordsScreen extends StatelessWidget {
                   'Subscribe for \$9.99 / month',
                   style: TextStyle(
                       fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.bolt, color: _daysmanTeal),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _daysmanTeal,
+                  side: const BorderSide(color: _daysmanTeal),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _launchLightningCheckout(context);
+                },
+                label: const Text(
+                  'Pay with Lightning ⚡ \$8.99 / month',
+                  style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -145,6 +173,14 @@ class MedicalRecordsScreen extends StatelessWidget {
     }
   }
 
+  // ── Strike Lightning Checkout ──────────────────────────────────────────────
+  void _launchLightningCheckout(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LightningCheckoutScreen()),
+    );
+  }
+
   // ── Navigation helper ──────────────────────────────────────────────────────
   void _handleNavigation(
     BuildContext context,
@@ -187,7 +223,7 @@ class MedicalRecordsScreen extends StatelessWidget {
             title: const Text('Daysman',
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.blue[700],
+            backgroundColor: _daysmanTeal,
             elevation: 0,
             iconTheme: const IconThemeData(color: Colors.white),
             actions: [
@@ -298,7 +334,7 @@ class MedicalRecordsScreen extends StatelessWidget {
         padding: EdgeInsets.zero,
         children: [
           DrawerHeader(
-            decoration: BoxDecoration(color: Colors.blue[700]),
+            decoration: const BoxDecoration(color: _daysmanTeal),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
@@ -419,8 +455,11 @@ class _UpgradeBanner extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Colors.blue[700]!, Colors.blue[900]!],
+          gradient: const LinearGradient(
+            colors: [
+              MedicalRecordsScreen._daysmanTeal,
+              MedicalRecordsScreen._daysmanTealDark,
+            ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
