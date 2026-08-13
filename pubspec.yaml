@@ -44,7 +44,7 @@ dev_dependencies:
 
   # Native splash screen generator — dev-only, generates Android splash
   # resources at build time. Not needed at runtime.
-  flutter_native_splash: ^2.4.8
+  flutter_native_splash: ^2.4.7
 
 flutter:
   uses-material-design: true
