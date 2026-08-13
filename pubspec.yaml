@@ -42,7 +42,22 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
 
+  # Native splash screen generator — dev-only, generates Android splash
+  # resources at build time. Not needed at runtime.
+  flutter_native_splash: ^2.4.8
+
 flutter:
   uses-material-design: true
   assets:
     - assets/
+
+# Config consumed by `dart run flutter_native_splash:create`.
+# Regenerates android/app/src/main/res/values*/styles.xml and drawable
+# resources — safe to re-run any time the icon or color changes.
+flutter_native_splash:
+  color: "#2C5F6E"
+  image: assets/daysman_splash_icon.png
+  android_12:
+    color: "#2C5F6E"
+    image: assets/daysman_splash_icon.png
+  fullscreen: false
