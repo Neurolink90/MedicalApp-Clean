@@ -4,9 +4,10 @@ import base64
 import logging
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, Form, HTTPException, File, UploadFile, Request, Body
+from fastapi import FastAPI, Form, HTTPException, File, UploadFile, Request, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import stripe
 import firebase_admin
 from firebase_admin import credentials, messaging, firestore, storage, auth
@@ -66,6 +67,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Auth Helper ───────────────────────────────────────────────────────────────
+bearer_scheme = HTTPBearer()
+
+def verify_owner(email: str, creds: HTTPAuthorizationCredentials):
+    """Verifies the bearer token is a valid Firebase ID token belonging to `email`."""
+    try:
+        decoded = auth.verify_id_token(creds.credentials)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if decoded.get("email") != email:
+        raise HTTPException(status_code=403, detail="Not authorized for this profile")
 
 # ── Stripe Checkout ───────────────────────────────────────────────────────────
 @app.post("/create-checkout-session")
@@ -211,9 +224,17 @@ async def register_token(request: Request):
 
 
 # ── Patient Profile ───────────────────────────────────────────────────────────
+# Requires a valid Firebase ID token belonging to the requested email.
+# `/patients/{email}` and `/profile` share this handler and both now require
+# Authorization: Bearer <firebase_id_token>, matching the pattern already used
+# in lightning_checkout_screen.dart.
 @app.get("/patients/{email}")
 @app.get("/profile")
-async def get_profile(email: str):
+async def get_profile(
+    email: str,
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    verify_owner(email, creds)
     if not db:
         raise HTTPException(status_code=500, detail="Database disconnected")
     doc = db.collection("patients").document(email).get()
@@ -223,20 +244,6 @@ async def get_profile(email: str):
         data.pop("fcm_token", None)
         return data
     return {"name": "New User", "email": email, "status": "Stable"}
-
-
-@app.get("/patients")
-async def get_all_patients():
-    if not db:
-        raise HTTPException(status_code=500, detail="Database disconnected")
-    docs = db.collection("patients").stream()
-    results = []
-    for d in docs:
-        data = d.to_dict()
-        data.pop("password",  None)
-        data.pop("fcm_token", None)
-        results.append(data)
-    return results
 
 
 @app.get("/appointments")
@@ -360,3 +367,4 @@ if __name__ == "__main__":
 # ── REMOVED — do not restore ──────────────────────────────────────────────────
 # /debug/db-check    — exposed raw Firestore patient data
 # /debug/seed-zach   — hardcoded test credentials
+# /patients (list-all) — unauthenticated dump of every patient's data
