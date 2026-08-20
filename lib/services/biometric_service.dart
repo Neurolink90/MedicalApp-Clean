@@ -23,17 +23,16 @@ class BiometricService {
   /// Triggers the native Face ID / Fingerprint / PIN prompt
   static Future<bool> authenticate() async {
     final isAvailable = await isBiometricAvailable();
-    
-    // If the device doesn't have biometrics/PIN setup, fail open (let them in) 
+
+    // If the device doesn't have biometrics/PIN setup, fail open (let them in)
     // or you could force them to set up a PIN. For now, we allow access.
     if (!isAvailable) return true;
-
     try {
       return await _auth.authenticate(
-        localizedReason: 'Please authenticate to access your medical records',
+        localizedReason: 'Please authenticate to access your Daysman health records',
         authMessages: const <AuthMessages>[
           AndroidAuthMessages(
-            signInTitle: 'MediRecords Pro',
+            signInTitle: 'Daysman',
             cancelButton: 'Cancel',
           ),
           IOSAuthMessages(
