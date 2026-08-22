@@ -14,6 +14,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   static const Color _daysmanTeal = Color(0xFF2C5F6E);
+  // Soft sage tint, matching the dashboard background. Text sitting
+  // directly on this background (not inside a white field) uses grey700 —
+  // verified 5.65:1 contrast, clears WCAG AA's 4.5:1 minimum.
+  static const Color _daysmanBackground = Color(0xFFF0F6F2);
 
   final _emailController    = TextEditingController();
   final _passwordController = TextEditingController();
@@ -46,7 +50,10 @@ class _LoginScreenState extends State<LoginScreen>
 
     _entrance = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      // Slower, more deliberate materialize for the icon — the whole
+      // sequence still lands around ~2s total so returning users aren't
+      // stuck waiting through a long splash just to reach the password field.
+      duration: const Duration(milliseconds: 2000),
     );
 
     _iconIn          = _staggered(0.00, 0.50);
@@ -135,19 +142,32 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: _daysmanBackground,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(32),
           child: Column(
             children: [
-              // Logo
+              // Logo + scripture reference materialize together as one unit
               _FadeSlideIn(
                 animation: _iconIn,
-                child: Image.asset(
-                  'assets/daysman_mark.png',
-                  width: 96,
-                  height: 96,
+                child: Column(
+                  children: [
+                    Image.asset(
+                      'assets/daysman_mark.png',
+                      width: 96,
+                      height: 96,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Job 9:33",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey[700],
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -160,9 +180,9 @@ class _LoginScreenState extends State<LoginScreen>
               ),
               _FadeSlideIn(
                 animation: _taglineIn,
-                child: const Text(
+                child: Text(
                   "Secure Health Records",
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: Colors.grey[700]),
                 ),
               ),
               const SizedBox(height: 40),
@@ -178,6 +198,8 @@ class _LoginScreenState extends State<LoginScreen>
                     labelText: "Email",
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.email_outlined),
+                    filled: true,
+                    fillColor: Colors.white,
                   ),
                 ),
               ),
@@ -195,6 +217,8 @@ class _LoginScreenState extends State<LoginScreen>
                     labelText: "Password",
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.lock_outlined),
+                    filled: true,
+                    fillColor: Colors.white,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscureText ? Icons.visibility_off : Icons.visibility,
@@ -252,6 +276,7 @@ class _LoginScreenState extends State<LoginScreen>
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _daysmanTeal,
                       side: const BorderSide(color: _daysmanTeal),
+                      backgroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
@@ -270,7 +295,7 @@ class _LoginScreenState extends State<LoginScreen>
                 child: Text(
                   "Protected by Firebase Authentication\n& Google Cloud Encryption",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey[400], fontSize: 11),
+                  style: TextStyle(color: Colors.grey[700], fontSize: 11),
                 ),
               ),
             ],
@@ -307,4 +332,3 @@ class _FadeSlideIn extends StatelessWidget {
     );
   }
 }
-

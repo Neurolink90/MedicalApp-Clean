@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'firebase_options.dart';
 import 'login_screen.dart';
 import 'services/biometric_service.dart';
+
+// ── Brand colors — kept in sync with medical_records_screen.dart ────────────
+const Color _daysmanTeal = Color(0xFF2C5F6E);
+const Color _daysmanTealDark = Color(0xFF1B3C46);
 
 // 1. Background message handler
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -13,21 +18,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 2. Initialize Firebase
+  // 2. Initialize Firebase — now pulls from the gitignored firebase_options.dart
+  // instead of a hardcoded key block.
   try {
     await Firebase.initializeApp(
-      options: const FirebaseOptions(
-        apiKey: "AIzaSyCrJBZBBvH_C6zVQxQ7WZl7NhooYgb0870",
-        authDomain: "medirecords-pro.firebaseapp.com",
-        projectId: "medirecords-pro",
-        storageBucket: "medirecords-pro.firebasestorage.app",
-        messagingSenderId: "379331373787",
-        appId: "1:379331373787:web:33555fcacc7fa3a92a7afe",
-        measurementId: "G-61P8TKS1V2",
-      ),
+      options: DefaultFirebaseOptions.currentPlatform,
     );
     debugPrint("Flutter Firebase layer initialized successfully");
-    
+
     // 3. Set background handler
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   } catch (e) {
@@ -82,18 +80,18 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _authenticate() async {
-    if (_isAuthenticating) return; 
-    
+    if (_isAuthenticating) return;
+
     _isAuthenticating = true; // Raise the shield (no setState needed for this flag)
-    
+
     final authenticated = await BiometricService.authenticate();
-    
+
     if (authenticated) {
       setState(() => _isLocked = false);
     }
 
-    // 3. BUFFER: The Android lifecycle takes a split second to fire the "resumed" 
-    // event after the native dialog closes. We wait 200ms before dropping the shield 
+    // 3. BUFFER: The Android lifecycle takes a split second to fire the "resumed"
+    // event after the native dialog closes. We wait 200ms before dropping the shield
     // to completely kill the race condition loop.
     await Future.delayed(const Duration(milliseconds: 200));
     _isAuthenticating = false; // Drop the shield
@@ -102,10 +100,10 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'MediRecords Pro',
+      title: 'Daysman',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(seedColor: _daysmanTeal),
         useMaterial3: true,
       ),
       home: _isLocked ? _buildLockScreen() : const LoginScreen(),
@@ -114,7 +112,7 @@ class _MyAppState extends State<MyApp> {
 
   Widget _buildLockScreen() {
     return Scaffold(
-      backgroundColor: Colors.blue[900],
+      backgroundColor: _daysmanTealDark,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -139,6 +137,8 @@ class _MyAppState extends State<MyApp> {
               icon: const Icon(Icons.fingerprint),
               label: const Text('Unlock'),
               style: ElevatedButton.styleFrom(
+                backgroundColor: _daysmanTeal,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
             ),

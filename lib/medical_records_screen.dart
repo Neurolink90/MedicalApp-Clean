@@ -16,9 +16,16 @@ class MedicalRecordsScreen extends StatelessWidget {
   final String userEmail;
   const MedicalRecordsScreen({super.key, required this.userEmail});
 
-  // ── Brand color ────────────────────────────────────────────────────────────
+  // ── Brand colors ───────────────────────────────────────────────────────────
   static const Color _daysmanTeal = Color(0xFF2C5F6E);
   static const Color _daysmanTealDark = Color(0xFF1B3C46);
+  // Soft sage tint for the screen background — cards stay pure white so they
+  // still pop against it. Verified 5.65:1 contrast for grey700 text on this
+  // background (WCAG AA requires 4.5:1 for normal text).
+  static const Color _daysmanBackground = Color(0xFFF0F6F2);
+  // Warm cream — used for cards instead of pure white, so they read as
+  // designed rather than a stock Material default.
+  static const Color _daysmanCardColor = Color(0xFFFBF8F2);
 
   // ── Backend URL ────────────────────────────────────────────────────────────
   static const String _apiBase = 'https://daysman-api.onrender.com';
@@ -44,7 +51,7 @@ class MedicalRecordsScreen extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Unlock the full power of Daysman.',
-              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+              style: TextStyle(fontSize: 16, color: Colors.grey[700]),
             ),
             const SizedBox(height: 32),
             _benefitRow(Icons.health_and_safety, Colors.red,
@@ -219,6 +226,7 @@ class MedicalRecordsScreen extends StatelessWidget {
         }
 
         return Scaffold(
+          backgroundColor: _daysmanBackground,
           appBar: AppBar(
             title: const Text('Daysman',
                 style: TextStyle(
@@ -250,9 +258,12 @@ class MedicalRecordsScreen extends StatelessWidget {
                     style: const TextStyle(
                         fontSize: 24, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
+                // grey700 (not grey600) — this text sits directly on the
+                // sage background, not inside a white card, so it needs the
+                // darker shade to clear WCAG AA contrast (see file header).
                 Text('Your health data is secured by Google Cloud.',
                     style:
-                        TextStyle(fontSize: 15, color: Colors.grey[600])),
+                        TextStyle(fontSize: 15, color: Colors.grey[700])),
                 const SizedBox(height: 32),
 
                 // ── Free features ──────────────────────────────────────────
@@ -514,6 +525,10 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
+        // Warm cream, not pure white — reads as designed rather than a
+        // stock Material default, while still popping against the sage
+        // screen background.
+        color: MedicalRecordsScreen._daysmanCardColor,
         elevation: 4,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12)),
@@ -522,7 +537,9 @@ class _ActionCard extends StatelessWidget {
           leading: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              // 20%, not 10% — the earlier tint was too washed out to read
+              // as a distinct backdrop behind the icon glyph.
+              color: iconColor.withOpacity(0.20),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: iconColor, size: 30),
