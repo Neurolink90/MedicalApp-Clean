@@ -149,10 +149,18 @@ class MedicalRecordsScreen extends StatelessWidget {
     );
 
     try {
+      // Backend now requires a Firebase ID token matching the requested
+      // email — same pattern already used by lightning_checkout_screen.dart.
+      final user = FirebaseAuth.instance.currentUser;
+      final idToken = await user?.getIdToken();
+
       final url = Uri.parse('$_apiBase/create-checkout-session');
       final response = await http.post(
         url,
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $idToken',
+        },
         body: jsonEncode({'email': userEmail}),
       );
 

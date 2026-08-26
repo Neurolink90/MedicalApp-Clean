@@ -78,17 +78,22 @@ def verify_owner(email: str, creds: HTTPAuthorizationCredentials):
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     if decoded.get("email") != email:
-        raise HTTPException(status_code=403, detail="Not authorized for this profile")
+        raise HTTPException(status_code=403, detail="Not authorized for this resource")
 
 # ── Stripe Checkout ───────────────────────────────────────────────────────────
 @app.post("/create-checkout-session")
-async def create_checkout_session(data: dict = Body(...)):
+async def create_checkout_session(
+    data: dict = Body(...),
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
     if not stripe.api_key:
         raise HTTPException(status_code=500, detail="Stripe not configured")
 
     email = data.get("email", "")
     if not email:
         raise HTTPException(status_code=400, detail="Email required")
+
+    verify_owner(email, creds)
 
     try:
         session = stripe.checkout.Session.create(
@@ -131,6 +136,10 @@ async def create_checkout_session(data: dict = Body(...)):
 
 @app.post("/stripe-webhook")
 async def stripe_webhook(request: Request):
+    # NOTE: Intentionally NOT protected by verify_owner — this is called by
+    # Stripe's servers, not the app, and has no Firebase ID token to send.
+    # It is secured instead by Stripe's own webhook signature verification
+    # below, which is the correct mechanism for a server-to-server webhook.
     webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
     payload        = await request.body()
     sig_header     = request.headers.get("stripe-signature")
@@ -198,7 +207,10 @@ async def payment_cancelled():
 # ── FCM Token ─────────────────────────────────────────────────────────────────
 @app.post("/register-token")
 @app.post("/update-fcm-token")
-async def register_token(request: Request):
+async def register_token(
+    request: Request,
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
     if not db:
         raise HTTPException(status_code=500, detail="Database disconnected")
 
@@ -215,6 +227,8 @@ async def register_token(request: Request):
     if not user_id or not fcm_token:
         raise HTTPException(status_code=400, detail="Missing user_id or fcm_token")
 
+    verify_owner(user_id, creds)
+
     db.collection("patients").document(user_id).set(
         {"fcm_token": fcm_token, "last_updated": firestore.SERVER_TIMESTAMP},
         merge=True,
@@ -225,9 +239,6 @@ async def register_token(request: Request):
 
 # ── Patient Profile ───────────────────────────────────────────────────────────
 # Requires a valid Firebase ID token belonging to the requested email.
-# `/patients/{email}` and `/profile` share this handler and both now require
-# Authorization: Bearer <firebase_id_token>, matching the pattern already used
-# in lightning_checkout_screen.dart.
 @app.get("/patients/{email}")
 @app.get("/profile")
 async def get_profile(
@@ -248,13 +259,23 @@ async def get_profile(
 
 @app.get("/appointments")
 async def get_appointments(email: str = ""):
-    # UptimeRobot ping target — keep lightweight
+    # Intentionally unauthenticated and returns static dummy data — this is
+    # the UptimeRobot ping target that keeps the Render free instance from
+    # spinning down. It does NOT touch Firestore and is NOT the real
+    # appointments data path (that's read directly via Firestore, see
+    # /patients/{email}/appointments/{appId} in firestore.rules). Do not
+    # add auth here or UptimeRobot will be unable to reach it.
     return [{"title": "Annual Checkup", "date": "2026-06-15", "time": "10:00 AM"}]
 
 
 # ── Document Upload ───────────────────────────────────────────────────────────
 @app.post("/documents/upload")
-async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
+async def upload_document(
+    email: str = Form(...),
+    file: UploadFile = File(...),
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    verify_owner(email, creds)
     if not db or not bucket:
         raise HTTPException(status_code=500, detail="Firebase disconnected")
     try:
@@ -303,7 +324,11 @@ async def upload_document(email: str = Form(...), file: UploadFile = File(...)):
 
 # ── Document List ─────────────────────────────────────────────────────────────
 @app.get("/documents")
-async def get_documents(email: str):
+async def get_documents(
+    email: str,
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    verify_owner(email, creds)
     if not db:
         raise HTTPException(status_code=500, detail="Database disconnected")
     docs = db.collection("documents").where(
@@ -311,9 +336,14 @@ async def get_documents(email: str):
     return [d.to_dict() for d in docs]
 
 
-# ── QR Share ──────────────────────────────────────────────────────────────────
+# ── QR Share (short-lived, meant to be scanned by someone else) ───────────────
 @app.get("/documents/share")
-async def share_document(email: str, filename: str):
+async def share_document(
+    email: str,
+    filename: str,
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    verify_owner(email, creds)
     if not db or not bucket:
         raise HTTPException(status_code=500, detail="Firebase disconnected")
     try:
@@ -334,9 +364,41 @@ async def share_document(email: str, filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Document Download (patient downloading their own file to their device) ───
+@app.get("/documents/download")
+async def download_document(
+    email: str,
+    filename: str,
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    verify_owner(email, creds)
+    if not db or not bucket:
+        raise HTTPException(status_code=500, detail="Firebase disconnected")
+    try:
+        blob_path  = f"documents/{email}/{filename}"
+        blob       = bucket.blob(blob_path)
+        signed_url = blob.generate_signed_url(
+            version="v4", expiration=timedelta(minutes=5), method="GET")
+        db.collection("audit_logs").add({
+            "timestamp": firestore.SERVER_TIMESTAMP,
+            "user":      email,
+            "action":    "DOWNLOAD_DOCUMENT",
+            "file":      filename,
+            "details":   "Signed URL generated for direct device download",
+        })
+        return {"signed_url": signed_url}
+    except Exception as e:
+        logger.error(f"❌ Download error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Audit Logs ────────────────────────────────────────────────────────────────
 @app.get("/audit-logs")
-async def get_audit_logs(email: str):
+async def get_audit_logs(
+    email: str,
+    creds: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+):
+    verify_owner(email, creds)
     if not db:
         raise HTTPException(status_code=500, detail="Database disconnected")
     try:

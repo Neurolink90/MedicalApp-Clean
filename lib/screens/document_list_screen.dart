@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:file_picker/file_picker.dart'; // ADDED: For picking PDFs/Images
+import 'package:file_picker/file_picker.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DocumentListScreen extends StatefulWidget {
   final String userEmail;
@@ -13,6 +15,8 @@ class DocumentListScreen extends StatefulWidget {
 }
 
 class _DocumentListScreenState extends State<DocumentListScreen> {
+  static const String _apiBase = 'https://api.daysman.health';
+
   List documents = [];
   bool isLoading = true;
 
@@ -22,11 +26,19 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
     fetchDocuments();
   }
 
+  Future<String?> _getIdToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return null;
+    return await user.getIdToken();
+  }
+
   Future<void> fetchDocuments() async {
     setState(() => isLoading = true);
     try {
+      final idToken = await _getIdToken();
       final response = await http.get(
-        Uri.parse('https://medicalapp-clean.onrender.com/documents?email=${widget.userEmail}'),
+        Uri.parse('$_apiBase/documents?email=${widget.userEmail}'),
+        headers: {'Authorization': 'Bearer $idToken'},
       );
 
       if (response.statusCode == 200) {
@@ -42,7 +54,7 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
     }
   }
 
-  // ADDED: The Upload Flow
+  // The Upload Flow
   Future<void> uploadDocument() async {
     // 1. Open the phone's file browser
     FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -52,14 +64,17 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
 
     if (result != null && result.files.single.path != null) {
       setState(() => isLoading = true);
-      
+
       try {
+        final idToken = await _getIdToken();
+
         // 2. Prepare the file for the Python backend
         var request = http.MultipartRequest(
           'POST',
-          Uri.parse('https://medicalapp-clean.onrender.com/documents/upload'),
+          Uri.parse('$_apiBase/documents/upload'),
         );
 
+        request.headers['Authorization'] = 'Bearer $idToken';
         // Add the user's email so the backend knows who owns the file
         request.fields['email'] = widget.userEmail;
         request.fields['patient_email'] = widget.userEmail; // Sending both just in case
@@ -69,7 +84,7 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
           await http.MultipartFile.fromPath('file', result.files.single.path!)
         );
 
-        // 3. Send it to Render
+        // 3. Send it to the backend
         var response = await request.send();
 
         if (response.statusCode == 200 || response.statusCode == 201) {
@@ -79,7 +94,7 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
             );
           }
           // Refresh the list to show the new file
-          fetchDocuments(); 
+          fetchDocuments();
         } else {
           throw Exception("Backend rejected the upload.");
         }
@@ -103,8 +118,10 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
     );
 
     try {
+      final idToken = await _getIdToken();
       final response = await http.get(
-        Uri.parse('https://medicalapp-clean.onrender.com/documents/share?email=${widget.userEmail}&filename=$filename'),
+        Uri.parse('$_apiBase/documents/share?email=${widget.userEmail}&filename=$filename'),
+        headers: {'Authorization': 'Bearer $idToken'},
       );
 
       if (mounted) Navigator.pop(context); // Close loading indicator
@@ -137,10 +154,61 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
             ],
           ),
         );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not generate share link."), backgroundColor: Colors.red),
+        );
       }
     } catch (e) {
       if (mounted) Navigator.pop(context);
       debugPrint("Sharing error: $e");
+    }
+  }
+
+  // ADDED: Download to this device. Separate endpoint and audit-log action
+  // from QR sharing (/documents/share) — this opens the signed URL directly
+  // so the device/browser's own save-or-view flow handles it, rather than
+  // displaying a QR code meant for someone else to scan.
+  Future<void> downloadDocument(String filename) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final idToken = await _getIdToken();
+      final response = await http.get(
+        Uri.parse('$_apiBase/documents/download?email=${widget.userEmail}&filename=$filename'),
+        headers: {'Authorization': 'Bearer $idToken'},
+      );
+
+      if (mounted) Navigator.pop(context);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final Uri signedUri = Uri.parse(data['signed_url']);
+
+        if (await canLaunchUrl(signedUri)) {
+          await launchUrl(signedUri, mode: LaunchMode.externalApplication);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Could not open download."), backgroundColor: Colors.red),
+          );
+        }
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Could not download file."), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context);
+      debugPrint("Download error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Download failed. Check connection."), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -150,7 +218,7 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
       appBar: AppBar(title: const Text("My Medical Records")),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          // ADDED: Friendly empty state so it isn't a scary blank screen
+          // Friendly empty state so it isn't a scary blank screen
           : documents.isEmpty
               ? Center(
                   child: Column(
@@ -168,18 +236,30 @@ class _DocumentListScreenState extends State<DocumentListScreen> {
                   itemCount: documents.length,
                   itemBuilder: (context, index) {
                     final doc = documents[index];
+                    final filename = doc['filename'] ?? 'Unknown File';
                     return ListTile(
                       leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-                      title: Text(doc['filename'] ?? 'Unknown File'),
+                      title: Text(filename),
                       subtitle: Text("Uploaded: ${doc['upload_date'] ?? 'Just now'}"),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.qr_code_2, color: Colors.blue),
-                        onPressed: () => showShareQR(doc['filename']),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.download, color: Colors.teal),
+                            tooltip: 'Download to this device',
+                            onPressed: () => downloadDocument(filename),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.qr_code_2, color: Colors.blue),
+                            tooltip: 'Share via QR',
+                            onPressed: () => showShareQR(filename),
+                          ),
+                        ],
                       ),
                     );
                   },
                 ),
-      // ADDED: The Floating Action Button for uploads
+      // The Floating Action Button for uploads
       floatingActionButton: FloatingActionButton(
         onPressed: uploadDocument,
         backgroundColor: Colors.blue[700],
