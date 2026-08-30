@@ -28,7 +28,7 @@ class MedicalRecordsScreen extends StatelessWidget {
   static const Color _daysmanCardColor = Color(0xFFFBF8F2);
 
   // ── Backend URL ────────────────────────────────────────────────────────────
-  static const String _apiBase = 'https://daysman-api.onrender.com';
+  static const String _apiBase = 'https://api.daysman.health';
 
   // ── Paywall ────────────────────────────────────────────────────────────────
   void _showPaywall(BuildContext context) {
